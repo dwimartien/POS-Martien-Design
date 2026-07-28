@@ -1,8 +1,8 @@
 {
-  "name": "Kasir Percetakan",
-  "short_name": "Kasir",
+  "name": "POS Martien Design",
+  "short_name": "POS Martien",
   "description": "Aplikasi kasir & invoice untuk usaha percetakan",
-  "start_url": "./kasir-percetakan.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
