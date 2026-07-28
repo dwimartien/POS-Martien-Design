@@ -1,6 +1,7 @@
-const CACHE_NAME = 'kasir-percetakan-v1';
+const CACHE_NAME = 'pos-martien-design-v2';
 const ASSETS = [
-  './kasir-percetakan.html',
+  './',
+  './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
