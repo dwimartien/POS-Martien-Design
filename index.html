@@ -460,6 +460,13 @@ input,select,textarea{font-family:inherit;}
 
 /* Settings */
 .settings-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:18px;box-shadow:var(--shadow-card);margin-bottom:16px;}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:16px;}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:16px 18px;box-shadow:var(--shadow-card);}
+.stat-card .stat-label{font-size:12px;color:var(--text-secondary);font-weight:600;margin-bottom:6px;}
+.stat-card .stat-value{font-size:20px;font-weight:800;}
+.stat-card .stat-sub{font-size:11.5px;color:var(--text-secondary);margin-top:4px;}
+.top-produk-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px;}
+.top-produk-row:last-child{border-bottom:none;}
 .settings-card h3{margin:0 0 3px 0;font-size:14.5px;}
 .settings-card p.desc{margin:0 0 14px 0;font-size:12.5px;color:var(--text-secondary);}
 .cat-manage-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);}
@@ -541,10 +548,13 @@ input,select,textarea{font-family:inherit;}
 
   <main id="content">
 
+    <section class="page" id="page-dashboard"></section>
     <section class="page" id="page-produk"></section>
     <section class="page" id="page-pesanan"></section>
     <section class="page" id="page-invoice"></section>
     <section class="page" id="page-quotation"></section>
+    <section class="page" id="page-pelanggan"></section>
+    <section class="page" id="page-piutang"></section>
     <section class="page" id="page-riwayat"></section>
     <section class="page" id="page-pengaturan"></section>
 
@@ -707,6 +717,9 @@ function schedulePushToFirestore(){
 
 /* ---------------------------- ICONS ---------------------------- */
 const ICONS = {
+  dashboard: `<svg viewBox="0 0 24 24"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>`,
+  pelanggan: `<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.2a3.2 3.2 0 0 1 0 6.2"/><path d="M18 14c2.4.6 4 2.6 4 6"/></svg>`,
+  piutang: `<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h13a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M16 12h3"/><circle cx="16" cy="12" r="1"/></svg>`,
   produk:  `<svg viewBox="0 0 24 24"><path d="M20 7 12 3 4 7l8 4 8-4Z"/><path d="M4 7v10l8 4 8-4V7"/><path d="M12 11v10"/></svg>`,
   pesanan: `<svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 11.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.6L21 8H6"/></svg>`,
   invoice: `<svg viewBox="0 0 24 24"><path d="M7 3h10a1 1 0 0 1 1 1v17l-3-2-2 2-2-2-2 2-2-2-1 1V4a1 1 0 0 1 1-1Z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>`,
@@ -862,14 +875,17 @@ function toast(msg, icon){
 
 /* ---------------------------- ROUTER ---------------------------- */
 const PAGES = [
+  {id:'dashboard', label:'Dashboard', icon:ICONS.dashboard},
   {id:'produk', label:'Produk', icon:ICONS.produk},
   {id:'pesanan', label:'Pesan', icon:ICONS.pesanan},
   {id:'invoice', label:'Invoice', icon:ICONS.invoice},
   {id:'quotation', label:'Quotation', icon:ICONS.quotation},
+  {id:'pelanggan', label:'Pelanggan', icon:ICONS.pelanggan},
+  {id:'piutang', label:'Piutang', icon:ICONS.piutang},
   {id:'riwayat', label:'Riwayat', icon:ICONS.riwayat},
   {id:'pengaturan', label:'Atur', icon:ICONS.pengaturan},
 ];
-let currentPage = 'pesanan';
+let currentPage = 'dashboard';
 let currentInvoiceId = null; // invoice currently shown on invoice page
 let currentQuotationId = null; // quotation currently shown on quotation page
 
@@ -898,10 +914,13 @@ function goTo(pageId, opts){
   document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
   document.getElementById('page-'+pageId).classList.add('active');
   renderSidebar();
+  if(pageId==='dashboard') renderDashboardPage();
   if(pageId==='produk') renderProdukPage();
   if(pageId==='pesanan') renderPesananPage();
   if(pageId==='invoice') renderInvoicePage(opts.invoiceId || currentInvoiceId);
   if(pageId==='quotation') renderQuotationPage(opts.quotationId || currentQuotationId);
+  if(pageId==='pelanggan') renderPelangganPage();
+  if(pageId==='piutang') renderPiutangPage();
   if(pageId==='riwayat') renderRiwayatPage();
   if(pageId==='pengaturan') renderPengaturanPage();
   window.scrollTo(0,0);
@@ -964,6 +983,63 @@ document.getElementById('btnThemeToggle').addEventListener('click', ()=>{
    PRODUK PAGE
    ================================================================ */
 let produkFilter = {kategori:'Semua', search:''};
+
+let dashMarginUnlocked = false;
+
+function renderDashboardPage(){
+  const el = document.getElementById('page-dashboard');
+  const s = computeDashboardStats();
+  el.innerHTML = `
+    <div class="page-header">
+      <div><h1>Dashboard</h1><p>Ringkasan omzet, produk terlaris, dan piutang</p></div>
+    </div>
+    <div class="page-body">
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-label">Omzet Hari Ini</div><div class="stat-value">${rupiah(s.omzetHariIni)}</div></div>
+        <div class="stat-card"><div class="stat-label">Omzet Minggu Ini</div><div class="stat-value">${rupiah(s.omzetMingguIni)}</div></div>
+        <div class="stat-card"><div class="stat-label">Omzet Bulan Ini</div><div class="stat-value">${rupiah(s.omzetBulanIni)}</div></div>
+        <div class="stat-card">
+          <div class="stat-label">Piutang (Belum Lunas)</div>
+          <div class="stat-value" style="color:var(--danger)">${rupiah(s.totalPiutang)}</div>
+          <div class="stat-sub">${s.jumlahPiutang} invoice &middot; <a href="#" data-goto="piutang" style="color:var(--accent);font-weight:700">lihat detail</a></div>
+        </div>
+      </div>
+
+      <div class="settings-card" id="dashMarginCard"></div>
+
+      <div class="settings-card">
+        <h3>Produk Terlaris</h3>
+        ${s.topProduk.length===0?`<p class="desc">Belum ada data transaksi.</p>`:
+          s.topProduk.map((p,i)=>`
+            <div class="top-produk-row">
+              <span>${i+1}. ${escapeHtml(p.nama)} <span style="color:var(--text-secondary)">(${p.qty}x)</span></span>
+              <b>${rupiah(p.omzet)}</b>
+            </div>
+          `).join('')}
+      </div>
+    </div>
+  `;
+  renderDashMarginCard();
+}
+
+function renderDashMarginCard(){
+  const card = document.getElementById('dashMarginCard');
+  if(!card) return;
+  const s = computeDashboardStats();
+  if(!dashMarginUnlocked){
+    card.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div><h3>Total Margin (Keuntungan)</h3><p class="desc" style="margin:0">Dilindungi PIN. Klik untuk melihat.</p></div>
+        <button class="btn btn-secondary btn-sm" id="btnUnlockDashMargin">${ICONS.lock} Lihat Margin</button>
+      </div>
+    `;
+    document.getElementById('btnUnlockDashMargin').addEventListener('click', ()=>{
+      askPinInline(card, ()=>{ dashMarginUnlocked = true; renderDashMarginCard(); });
+    });
+    return;
+  }
+  card.innerHTML = `<h3>Total Margin (Keuntungan)</h3><div class="stat-value" style="color:var(--success);font-size:22px">${rupiah(s.totalMargin)}</div><p class="desc">Dihitung dari selisih harga jual dan biaya vendor/produksi pada seluruh transaksi (hanya item yang punya data biaya vendor).</p>`;
+}
 
 function renderProdukPage(){
   const el = document.getElementById('page-produk');
@@ -1693,7 +1769,10 @@ function renderCartInto(container, isMobile){
   container.innerHTML = `
     <div class="cart-header"><h3>Pesanan</h3></div>
     <div class="cart-customer">
-      <input type="text" placeholder="Nama customer" id="${isMobile?'custNamaM':'custNamaD'}" value="${escapeHtml(cart.customer.nama)}">
+      <input type="text" placeholder="Nama customer" id="${isMobile?'custNamaM':'custNamaD'}" list="${isMobile?'custNamaListM':'custNamaListD'}" value="${escapeHtml(cart.customer.nama)}">
+      <datalist id="${isMobile?'custNamaListM':'custNamaListD'}">
+        ${computeCustomerList().map(c=>`<option value="${escapeHtml(c.nama)}">`).join('')}
+      </datalist>
       <input type="text" placeholder="No. WhatsApp" id="${isMobile?'custWAM':'custWAD'}" value="${escapeHtml(cart.customer.noWA)}">
       <input type="text" placeholder="Nama pesanan (opsional)" id="${isMobile?'namaPesananM':'namaPesananD'}" value="${escapeHtml(cart.namaPesanan||'')}">
     </div>
@@ -1732,7 +1811,15 @@ function renderCartInto(container, isMobile){
   `;
   const namaInput = container.querySelector(isMobile?'#custNamaM':'#custNamaD');
   const waInput = container.querySelector(isMobile?'#custWAM':'#custWAD');
-  namaInput.addEventListener('input', e=>{ cart.customer.nama = e.target.value; syncCustomerFields(); });
+  namaInput.addEventListener('input', e=>{
+    cart.customer.nama = e.target.value;
+    const match = computeCustomerList().find(c=>c.nama===e.target.value);
+    if(match && !cart.customer.noWA.trim()){
+      cart.customer.noWA = match.noWA;
+      waInput.value = match.noWA;
+    }
+    syncCustomerFields();
+  });
   waInput.addEventListener('input', e=>{ cart.customer.noWA = e.target.value; syncCustomerFields(); });
   const namaPesananInput = container.querySelector(isMobile?'#namaPesananM':'#namaPesananD');
   namaPesananInput.addEventListener('input', e=>{ cart.namaPesanan = e.target.value; syncCustomerFields(); });
@@ -1997,6 +2084,71 @@ function getInvoiceOrders(invoice){
   const o = state.orders.find(x=>x.id===invoice.orderId);
   return o ? [o] : [];
 }
+
+/* ---------------------------- ANALYTICS HELPERS (Dashboard/Pelanggan/Piutang) ---------------------------- */
+function allInvoiceRows(){
+  return state.invoices.map(inv=>{
+    const orders = getInvoiceOrders(inv);
+    const payment = getInvoicePayment(inv, orders);
+    const customer = orders[0] ? orders[0].customer : {nama:'-', noWA:''};
+    return {invoice:inv, orders, payment, customer};
+  }).filter(r=>r.orders.length>0);
+}
+
+function sisaTagihanOf(payment){
+  if(payment.statusPembayaran==='DP') return Math.max(0, (payment.total||0)-(payment.nominalDP||0));
+  if(payment.statusPembayaran==='Belum Bayar') return payment.total||0;
+  return 0;
+}
+
+function computeDashboardStats(){
+  const rows = allInvoiceRows();
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfWeek = new Date(startOfDay); startOfWeek.setDate(startOfDay.getDate()-startOfDay.getDay());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  let omzetHariIni=0, omzetMingguIni=0, omzetBulanIni=0, totalPiutang=0, jumlahPiutang=0, totalMargin=0;
+  const produkTally = {};
+  rows.forEach(r=>{
+    const d = new Date(r.invoice.tanggal);
+    const total = r.payment.total||0;
+    if(d>=startOfDay) omzetHariIni+=total;
+    if(d>=startOfWeek) omzetMingguIni+=total;
+    if(d>=startOfMonth) omzetBulanIni+=total;
+    const sisa = sisaTagihanOf(r.payment);
+    if(sisa>0){ totalPiutang+=sisa; jumlahPiutang+=1; }
+    r.orders.forEach(o=>{
+      totalMargin += orderMarginInfo(o).total;
+      o.items.forEach(item=>{
+        const key = item.nama;
+        if(!produkTally[key]) produkTally[key] = {nama:item.nama, qty:0, omzet:0};
+        const qty = (item.detail && item.detail.jumlah) ? item.detail.jumlah : 1;
+        produkTally[key].qty += qty;
+        produkTally[key].omzet += item.subtotal;
+      });
+    });
+  });
+  const topProduk = Object.values(produkTally).sort((a,b)=>b.omzet-a.omzet).slice(0,5);
+  return {omzetHariIni, omzetMingguIni, omzetBulanIni, totalPiutang, jumlahPiutang, totalMargin, topProduk, totalInvoice: rows.length};
+}
+
+function computeCustomerList(){
+  const map = {};
+  state.orders.forEach(o=>{
+    const key = (o.customer.noWA||'').trim() || `nama:${(o.customer.nama||'').trim().toLowerCase()}`;
+    if(!key.replace('nama:','').trim()) return;
+    if(!map[key]) map[key] = {nama:o.customer.nama, noWA:o.customer.noWA, totalOrder:0, totalOmzet:0, lastTanggal:o.tanggal, orders:[]};
+    map[key].totalOrder += 1;
+    map[key].totalOmzet += o.total||0;
+    map[key].orders.push(o);
+    if(new Date(o.tanggal) > new Date(map[key].lastTanggal)) map[key].lastTanggal = o.tanggal;
+    // keep most recently seen name/WA as the display one
+    if(new Date(o.tanggal) >= new Date(map[key].lastTanggal)){ map[key].nama = o.customer.nama; map[key].noWA = o.customer.noWA; }
+  });
+  return Object.values(map).sort((a,b)=> new Date(b.lastTanggal)-new Date(a.lastTanggal));
+}
+
 function getOrderInvoice(order){
   if(order.mergedInto) return state.invoices.find(i=>i.id===order.mergedInto) || null;
   return state.invoices.find(i=>!i.isMerged && i.orderId===order.id) || null;
@@ -2645,6 +2797,119 @@ const STATUS_PESANAN_BADGE = {'Pesanan Masuk':'badge-blue','Proses Cetak':'badge
 let riwayatFilter = 'Semua';
 let selectedOrderIds = new Set();
 
+let pelangganSearch = '';
+
+function renderPelangganPage(){
+  const el = document.getElementById('page-pelanggan');
+  el.innerHTML = `
+    <div class="page-header"><div><h1>Pelanggan</h1><p>Daftar customer berdasarkan riwayat pesanan</p></div></div>
+    <div class="page-body">
+      <div class="search-row">
+        <div class="search-box">${ICONS.search}<input type="text" id="pelangganSearchInput" placeholder="Cari nama/No. WA..." value="${escapeHtml(pelangganSearch)}"></div>
+      </div>
+      <div class="list-card" id="pelangganList"></div>
+    </div>
+  `;
+  document.getElementById('pelangganSearchInput').addEventListener('input', (e)=>{
+    pelangganSearch = e.target.value;
+    renderPelangganList();
+  });
+  renderPelangganList();
+}
+
+function renderPelangganList(){
+  const list = document.getElementById('pelangganList');
+  let customers = computeCustomerList();
+  const q = pelangganSearch.trim().toLowerCase();
+  if(q) customers = customers.filter(c => (c.nama||'').toLowerCase().includes(q) || (c.noWA||'').includes(q));
+  if(customers.length===0){
+    list.innerHTML = `<div class="empty-state">${ICONS.pelanggan}<h3>Belum ada pelanggan</h3><p>Pelanggan akan muncul otomatis setelah ada transaksi.</p></div>`;
+    return;
+  }
+  list.innerHTML = customers.map((c,i)=>`
+    <div class="list-row" data-cust-idx="${i}">
+      <div class="list-avatar">${c.nama ? c.nama.trim()[0].toUpperCase() : '?'}</div>
+      <div class="list-main">
+        <div class="list-title">${escapeHtml(c.nama||'-')}</div>
+        <div class="list-sub">${escapeHtml(c.noWA||'-')} &middot; ${c.totalOrder} transaksi &middot; terakhir ${fmtDateShort(c.lastTanggal)}</div>
+      </div>
+      <div class="list-right"><div class="list-amount">${rupiah(c.totalOmzet)}</div></div>
+    </div>
+  `).join('');
+  list.querySelectorAll('[data-cust-idx]').forEach(row=>{
+    row.addEventListener('click', ()=> openCustomerDetailModal(customers[+row.dataset.custIdx]));
+  });
+}
+
+function openCustomerDetailModal(cust){
+  const ordersSorted = [...cust.orders].sort((a,b)=> new Date(b.tanggal)-new Date(a.tanggal));
+  openModal(`
+    <div class="modal-head"><h3>${escapeHtml(cust.nama||'-')}</h3><button class="icon-btn" data-action="close-modal">${ICONS.close}</button></div>
+    <div class="modal-body">
+      <div class="field-hint">${escapeHtml(cust.noWA||'-')}</div>
+      <div class="summary-line"><span>Total transaksi</span><span>${cust.totalOrder}</span></div>
+      <div class="summary-line"><span>Total omzet</span><b>${rupiah(cust.totalOmzet)}</b></div>
+      <div class="field-hint" style="margin-top:10px;font-weight:700">Riwayat Pesanan</div>
+      <div class="list-card" style="margin-top:4px">
+        ${ordersSorted.map(o=>`
+          <div class="list-row" data-cust-order-id="${o.id}">
+            <div class="list-main">
+              <div class="list-title">${orderDisplayTitle(o)}</div>
+              <div class="list-sub">${fmtDateShort(o.tanggal)} &middot; ${o.items.length} item</div>
+            </div>
+            <div class="list-right"><div class="list-amount">${rupiah(o.total)}</div></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-secondary" data-action="close-modal">Tutup</button></div>
+  `);
+  document.querySelectorAll('[data-cust-order-id]').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      const o = state.orders.find(x=>x.id===row.dataset.custOrderId);
+      if(o){ closeModal(); openOrderDetailModal(o); }
+    });
+  });
+}
+
+function renderPiutangPage(){
+  const el = document.getElementById('page-piutang');
+  const rows = allInvoiceRows()
+    .map(r=>({...r, sisa: sisaTagihanOf(r.payment)}))
+    .filter(r=>r.sisa>0)
+    .sort((a,b)=> new Date(a.invoice.tanggal)-new Date(b.invoice.tanggal));
+  const totalPiutang = rows.reduce((s,r)=>s+r.sisa,0);
+  el.innerHTML = `
+    <div class="page-header"><div><h1>Piutang</h1><p>Invoice yang belum lunas atau masih DP, diurutkan dari yang paling lama</p></div></div>
+    <div class="page-body">
+      <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));max-width:340px">
+        <div class="stat-card"><div class="stat-label">Total Piutang</div><div class="stat-value" style="color:var(--danger)">${rupiah(totalPiutang)}</div><div class="stat-sub">${rows.length} invoice</div></div>
+      </div>
+      <div class="list-card" id="piutangList">
+        ${rows.length===0?`<div class="empty-state">${ICONS.piutang}<h3>Tidak ada piutang</h3><p>Semua invoice sudah lunas.</p></div>`:
+          rows.map(r=>{
+            const payBadge = r.payment.statusPembayaran==='DP' ? 'badge-orange' : 'badge-red';
+            return `
+            <div class="list-row" data-piutang-invoice="${r.invoice.id}">
+              <div class="list-avatar">${r.customer.nama ? r.customer.nama.trim()[0].toUpperCase() : '?'}</div>
+              <div class="list-main">
+                <div class="list-title">${escapeHtml(r.customer.nama||'-')} &middot; <span style="color:var(--text-secondary);font-weight:600">INV-${String(r.invoice.nomorInvoice).padStart(4,'0')}</span></div>
+                <div class="list-sub">${fmtDateShort(r.invoice.tanggal)} &middot; <span class="badge ${payBadge}">${r.payment.statusPembayaran}</span></div>
+              </div>
+              <div class="list-right">
+                <div class="list-amount" style="color:var(--danger)">${rupiah(r.sisa)}</div>
+                <div style="font-size:11px;color:var(--text-secondary)">dari ${rupiah(r.payment.total)}</div>
+              </div>
+            </div>`;
+          }).join('')}
+      </div>
+    </div>
+  `;
+  el.querySelectorAll('[data-piutang-invoice]').forEach(row=>{
+    row.addEventListener('click', ()=> goTo('invoice', {invoiceId: row.dataset.piutangInvoice}));
+  });
+}
+
 function renderRiwayatPage(){
   const el = document.getElementById('page-riwayat');
   const filters = ['Semua', ...STATUS_PESANAN_LIST];
@@ -3198,7 +3463,7 @@ if('serviceWorker' in navigator){
 document.getElementById('btnGoogleLogin').addEventListener('click', signInWithGoogle);
 
 renderSidebar();
-goTo('pesanan');
+goTo('dashboard');
 
 if(!firebaseAvailable){
   document.getElementById('loginGate').style.display = 'none';
