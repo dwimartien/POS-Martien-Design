@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>POS Martien Design</title>
+<title>Kasir Percetakan</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" id="appFavicon">
 <meta name="theme-color" content="#2D5185">
@@ -223,7 +223,7 @@ input,select,textarea{font-family:inherit;}
 }
 .search-box input{
   width:100%;padding:9px 14px 9px 36px;border-radius:999px;border:1px solid var(--border);
-  background:var(--bg-soft);font-size:13.5px;outline:none;
+  background:var(--bg-soft);font-size:13.5px;outline:none;color:var(--text);
 }
 .search-box input:focus{border-color:var(--accent);background:var(--surface);}
 .search-box svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;stroke:var(--text-secondary);fill:none;stroke-width:2;}
@@ -368,7 +368,7 @@ input,select,textarea{font-family:inherit;}
 .field{display:flex;flex-direction:column;gap:5px;}
 .field label{font-size:12.5px;font-weight:600;color:var(--text-secondary);}
 .field input,.field select,.field textarea{
-  padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:13.5px;outline:none;background:var(--bg-soft);width:100%;
+  padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:13.5px;outline:none;background:var(--bg-soft);width:100%;color:var(--text);
 }
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--accent);background:var(--surface);}
 .field-row{display:flex;gap:10px;}
@@ -739,8 +739,8 @@ const ICONS = {
   unlock:  `<svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 7.6-1.8"/></svg>`,
   merge:   `<svg viewBox="0 0 24 24"><path d="M8 3v7a3 3 0 0 0 3 3h5"/><path d="m13 10 3 3-3 3"/><path d="M8 21v-7"/></svg>`,
 };
-const UNIT_ICON = {m2:ICONS.ruler, m1:ICONS.ruler, cm:ICONS.ruler, lembar:ICONS.sheet, unit:ICONS.unit, custom:ICONS.custom};
-const UNIT_LABEL = {m2:'Per m²', m1:'Per meter', cm:'Per cm', lembar:'Per lembar', unit:'Per unit', custom:'Custom'};
+const UNIT_ICON = {m2:ICONS.ruler, m1:ICONS.ruler, cm:ICONS.ruler, lembar:ICONS.sheet, unit:ICONS.unit, custom:ICONS.custom, jasa:ICONS.quotation};
+const UNIT_LABEL = {m2:'Per m²', m1:'Per meter', cm:'Per cm', lembar:'Per lembar', unit:'Per unit', custom:'Custom', jasa:'Jasa Desain'};
 
 /* ---------------------------- STORAGE ---------------------------- */
 const STORE_KEYS = ['products','orders','invoices','quotations','settings'];
@@ -971,7 +971,19 @@ function renderProdukPage(){
   el.innerHTML = `
     <div class="page-header">
       <div><h1>Produk</h1><p>Kelola daftar produk dan satuan harga</p></div>
-      <button class="btn btn-primary" data-action="new-product">${ICONS.plus} Tambah Produk</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary" id="btnToggleCatManage">${ICONS.pengaturan||''} Kelola Kategori</button>
+        <button class="btn btn-primary" data-action="new-product">${ICONS.plus} Tambah Produk</button>
+      </div>
+    </div>
+    <div class="settings-card" id="catManagePanel" style="display:none;margin-bottom:16px">
+      <h3>Kategori Produk</h3>
+      <p class="desc">Kategori ditampilkan sebagai pill/tab pada menu Produk dan Buat Pesanan.</p>
+      <div id="catList"></div>
+      <div class="field-row" style="margin-top:10px">
+        <div class="field"><input type="text" id="newCatInput" placeholder="Nama kategori baru"></div>
+        <button class="btn btn-secondary" id="btnAddCat">${ICONS.plus} Tambah</button>
+      </div>
     </div>
     <div class="search-row">
       <div class="search-box">${ICONS.search}<input type="text" id="produkSearch" placeholder="Cari produk..." value="${escapeHtml(produkFilter.search)}"></div>
@@ -987,6 +999,22 @@ function renderProdukPage(){
   });
   el.querySelectorAll('[data-produk-cat]').forEach(b=>{
     b.addEventListener('click', ()=>{ produkFilter.kategori = b.dataset.produkCat; renderProdukPage(); });
+  });
+  document.getElementById('btnToggleCatManage').addEventListener('click', ()=>{
+    const panel = document.getElementById('catManagePanel');
+    panel.style.display = panel.style.display==='none' ? 'block' : 'none';
+  });
+  renderCatList();
+  document.getElementById('btnAddCat').addEventListener('click', ()=>{
+    const input = document.getElementById('newCatInput');
+    const val = input.value.trim();
+    if(!val) return;
+    if(state.settings.categories.includes(val)){ toast('Kategori sudah ada', ICONS.close); return; }
+    state.settings.categories.push(val);
+    persist();
+    input.value='';
+    renderCatList();
+    renderProdukPage();
   });
   renderProdukGrid();
 }
@@ -1012,7 +1040,7 @@ function renderProdukGrid(){
       <div class="product-visual">${UNIT_ICON[p.tipeSatuan]}</div>
       <div class="product-name">${escapeHtml(p.nama)}</div>
       <div class="product-unit-badge">${UNIT_LABEL[p.tipeSatuan]}</div>
-      <div class="product-price">${rupiah(p.harga)}</div>
+      <div class="product-price">${p.tipeSatuan==='jasa' ? jasaPriceSummary(p) : rupiah(p.harga)}</div>
     </div>
   `).join('');
   grid.querySelectorAll('[data-edit-product]').forEach(card=>{
@@ -1020,8 +1048,15 @@ function renderProdukGrid(){
   });
 }
 
+function jasaPriceSummary(p){
+  const allHarga = (p.varianList||[]).flatMap(v=>(v.paketList||[]).map(pk=>pk.harga));
+  if(allHarga.length===0) return 'Belum ada paket';
+  const min = Math.min(...allHarga);
+  return `Mulai ${rupiah(min)}`;
+}
+
 function unitFieldLabel(tipe){
-  return {m2:'Harga per m²', m1:'Harga per meter', cm:'Harga per cm²', lembar:'Harga per Lembar', unit:'Harga per Unit', custom:'Harga Satuan'}[tipe];
+  return {m2:'Harga per m²', m1:'Harga per meter', cm:'Harga per cm²', lembar:'Harga per Lembar', unit:'Harga per Unit', custom:'Harga Satuan', jasa:'Harga (diatur per paket)'}[tipe];
 }
 
 function openProductModal(productId){
@@ -1030,6 +1065,76 @@ function openProductModal(productId){
   const catOptions = state.settings.categories.map(c=>`<option value="${escapeHtml(c)}" ${p.kategoriTampilan===c?'selected':''}>${escapeHtml(c)}</option>`).join('');
   let priceUnlocked = false; // re-locks every time the modal is opened
   let askingPin = false;
+  let varianListLive = editing && Array.isArray(p.varianList) ? JSON.parse(JSON.stringify(p.varianList)) : [];
+
+  function pinGateHtml(hintText){
+    return `
+      <div class="field-hint">${ICONS.lock} ${hintText}</div>
+      <div class="field-row">
+        <div class="field"><input type="password" inputmode="numeric" id="mPinInput" placeholder="PIN" autofocus></div>
+        <button type="button" class="btn btn-primary" id="mPinSubmit">${ICONS.unlock} Buka</button>
+      </div>
+      <div class="field-hint" id="mPinError" style="color:var(--danger);display:none">PIN salah, coba lagi.</div>
+    `;
+  }
+
+  function varianRowHtml(v, vi){
+    return `
+      <div class="settings-card" style="padding:12px;margin-bottom:8px">
+        <div class="field-row" style="align-items:flex-end">
+          <div class="field"><label>Nama varian</label><input type="text" class="varianNamaInput" data-vi="${vi}" value="${escapeHtml(v.nama)}" placeholder="mis. Desain Logo"></div>
+          <button type="button" class="icon-btn btnRemoveVarian" data-vi="${vi}" title="Hapus varian">${ICONS.trash}</button>
+        </div>
+        <div class="field-hint" style="margin-top:8px;margin-bottom:4px">Paket harga:</div>
+        <div class="paketListWrap" data-vi="${vi}">
+          ${v.paketList.map((pk,pi)=>`
+            <div class="field-row" style="align-items:flex-end;margin-bottom:6px">
+              <div class="field"><input type="text" class="paketNamaInput" data-vi="${vi}" data-pi="${pi}" value="${escapeHtml(pk.nama)}" placeholder="mis. Basic"></div>
+              <div class="field"><input type="number" min="0" class="paketHargaInput" data-vi="${vi}" data-pi="${pi}" value="${pk.harga||''}" placeholder="Harga"></div>
+              <button type="button" class="icon-btn btnRemovePaket" data-vi="${vi}" data-pi="${pi}">${ICONS.close}</button>
+            </div>
+          `).join('')}
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm btnAddPaket" data-vi="${vi}">${ICONS.plus} Tambah Paket</button>
+      </div>
+    `;
+  }
+
+  function varianSectionHtml(){
+    if(askingPin) return pinGateHtml('Masukkan PIN untuk mengatur varian & paket jasa.');
+    if(!priceUnlocked) return `<button type="button" class="btn btn-secondary btn-sm" id="btnUnlockPrice">${ICONS.lock} Masukkan PIN untuk kelola varian & paket</button>`;
+    return `
+      <div class="field-hint" style="color:var(--success)">${ICONS.unlock} Kelola varian & paket jasa desain.</div>
+      <div id="varianListWrap">${varianListLive.map((v,vi)=>varianRowHtml(v,vi)).join('') || '<div class="field-hint">Belum ada varian. Tambah varian dulu.</div>'}</div>
+      <button type="button" class="btn btn-secondary btn-sm" id="btnAddVarian" style="margin-top:6px">${ICONS.plus} Tambah Varian Jasa</button>
+    `;
+  }
+
+  function bindVarianEvents(){
+    const addVarianBtn = document.getElementById('btnAddVarian');
+    if(addVarianBtn) addVarianBtn.addEventListener('click', ()=>{
+      varianListLive.push({id:uid(), nama:'', paketList:[{id:uid(), nama:'', harga:0}]});
+      refreshPriceSection();
+    });
+    document.querySelectorAll('.varianNamaInput').forEach(inp=>{
+      inp.addEventListener('input', ()=>{ varianListLive[+inp.dataset.vi].nama = inp.value; });
+    });
+    document.querySelectorAll('.btnRemoveVarian').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ varianListLive.splice(+btn.dataset.vi,1); refreshPriceSection(); });
+    });
+    document.querySelectorAll('.paketNamaInput').forEach(inp=>{
+      inp.addEventListener('input', ()=>{ varianListLive[+inp.dataset.vi].paketList[+inp.dataset.pi].nama = inp.value; });
+    });
+    document.querySelectorAll('.paketHargaInput').forEach(inp=>{
+      inp.addEventListener('input', ()=>{ varianListLive[+inp.dataset.vi].paketList[+inp.dataset.pi].harga = parseFloat(inp.value)||0; });
+    });
+    document.querySelectorAll('.btnRemovePaket').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ varianListLive[+btn.dataset.vi].paketList.splice(+btn.dataset.pi,1); refreshPriceSection(); });
+    });
+    document.querySelectorAll('.btnAddPaket').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ varianListLive[+btn.dataset.vi].paketList.push({id:uid(), nama:'', harga:0}); refreshPriceSection(); });
+    });
+  }
 
   function priceSectionHtml(tipe){
     const showMin = ['m2','m1','cm','lembar'].includes(tipe);
@@ -1083,7 +1188,8 @@ function openProductModal(productId){
           <option value="cm" ${p.tipeSatuan==='cm'?'selected':''}>Per cm² — input ukuran cetak (panjang × lebar) dalam cm, untuk cutting sticker</option>
           <option value="lembar" ${p.tipeSatuan==='lembar'?'selected':''}>Per Lembar — input jumlah cetak</option>
           <option value="unit" ${p.tipeSatuan==='unit'?'selected':''}>Per Unit/Pcs — input jumlah cetak</option>
-          <option value="custom" ${p.tipeSatuan==='custom'?'selected':''}>Custom/Manual</option>
+          <option value="custom" ${p.tipeSatuan==='custom'?'selected':''}>Custom/Manual — harga & biaya vendor diisi manual saat pesan (untuk borongan)</option>
+          <option value="jasa" ${p.tipeSatuan==='jasa'?'selected':''}>Jasa Desain — punya varian & paket harga sendiri</option>
         </select>
       </div>
 
@@ -1092,7 +1198,7 @@ function openProductModal(productId){
         <select id="mKategori">${catOptions || '<option value="">Belum ada kategori — buat di Pengaturan</option>'}</select>
       </div>
 
-      <div class="field">
+      <div class="field" id="mJenisProduksiWrap" style="display:${p.tipeSatuan==='jasa'?'none':'flex'}">
         <label>Jenis produksi</label>
         <div class="radio-group">
           <button type="button" class="radio-chip ${p.jenisProduksi==='sendiri'?'active':''}" data-jenis="sendiri">Produksi Sendiri</button>
@@ -1100,7 +1206,7 @@ function openProductModal(productId){
         </div>
       </div>
 
-      <div id="mPriceSection">${priceSectionHtml(p.tipeSatuan)}</div>
+      <div id="mPriceSection">${p.tipeSatuan==='jasa' ? varianSectionHtml() : priceSectionHtml(p.tipeSatuan)}</div>
     </div>
     <div class="modal-foot">
       ${editing?`<button class="btn btn-danger" data-action="delete-product" data-id="${p.id}" style="margin-right:auto">${ICONS.trash} Hapus</button>`:''}
@@ -1110,8 +1216,10 @@ function openProductModal(productId){
   `);
 
   function refreshPriceSection(){
-    document.getElementById('mPriceSection').innerHTML = priceSectionHtml(document.getElementById('mTipeSatuan').value);
+    const tipe = document.getElementById('mTipeSatuan').value;
+    document.getElementById('mPriceSection').innerHTML = tipe==='jasa' ? varianSectionHtml() : priceSectionHtml(tipe);
     bindPriceSectionEvents();
+    if(tipe==='jasa') bindVarianEvents();
   }
 
   function bindPriceSectionEvents(){
@@ -1139,6 +1247,7 @@ function openProductModal(productId){
     }
   }
   bindPriceSectionEvents();
+  if(p.tipeSatuan==='jasa') bindVarianEvents();
 
   document.querySelectorAll('#modalBox [data-jenis]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -1148,12 +1257,44 @@ function openProductModal(productId){
       if(vw) vw.style.display = jenisProduksiLive==='vendor' ? 'flex':'none';
     });
   });
-  document.getElementById('mTipeSatuan').addEventListener('change', refreshPriceSection);
+  document.getElementById('mTipeSatuan').addEventListener('change', (e)=>{
+    const jpw = document.getElementById('mJenisProduksiWrap');
+    if(jpw) jpw.style.display = e.target.value==='jasa' ? 'none' : 'flex';
+    refreshPriceSection();
+  });
 
   document.getElementById('modalBox').querySelector('[data-action="save-product"]').addEventListener('click', ()=>{
     const nama = document.getElementById('mNama').value.trim();
     const tipeSatuan = document.getElementById('mTipeSatuan').value;
     if(!nama){ toast('Nama produk wajib diisi', ICONS.close); return; }
+
+    if(tipeSatuan==='jasa'){
+      let varianToSave = p.varianList || [];
+      if(priceUnlocked){
+        const cleaned = varianListLive
+          .map(v=>({id:v.id, nama:(v.nama||'').trim(), paketList:(v.paketList||[]).map(pk=>({id:pk.id, nama:(pk.nama||'').trim(), harga:parseFloat(pk.harga)||0})).filter(pk=>pk.nama && pk.harga>0)}))
+          .filter(v=>v.nama && v.paketList.length>0);
+        if(cleaned.length===0){ toast('Tambahkan minimal 1 varian dengan 1 paket (isi nama & harga)', ICONS.close); return; }
+        varianToSave = cleaned;
+      } else if(!editing || varianToSave.length===0){
+        toast('Masukkan PIN dahulu, lalu tambahkan minimal 1 varian dengan 1 paket', ICONS.close);
+        return;
+      }
+      const data = {
+        nama, tipeSatuan,
+        harga:0, hargaMinimum:0,
+        kategoriTampilan: document.getElementById('mKategori').value,
+        jenisProduksi:'sendiri', hargaVendor:0,
+        varianList: varianToSave,
+      };
+      if(editing){ Object.assign(p, data); } else { state.products.push({id:uid(), ...data}); }
+      persist();
+      closeModal();
+      renderProdukPage();
+      toast(editing?'Produk diperbarui':'Produk ditambahkan');
+      return;
+    }
+
     const hargaInput = document.getElementById('mHarga');
     if(!hargaInput){ toast('Masukkan PIN dahulu untuk mengatur harga', ICONS.close); return; }
     const hargaMinInput = document.getElementById('mHargaMin');
@@ -1308,7 +1449,7 @@ function renderPesananGrid(){
 }
 
 function calcSubtotalForType(p, vals){
-  const harga = p.harga||0;
+  const harga = (p.tipeSatuan==='custom' && vals.hargaManual!==undefined) ? (parseFloat(vals.hargaManual)||0) : (p.harga||0);
   const hargaMinimum = p.hargaMinimum||0;
   let raw = 0, detail = {}, calcText='';
   if(p.tipeSatuan==='m2'){
@@ -1340,7 +1481,7 @@ function calcSubtotalForType(p, vals){
     const jumlah = parseFloat(vals.jumlah)||1;
     raw = jumlah*harga;
     detail = {jumlah};
-    calcText = jumlah>1 ? `${jumlah} x ${rupiah(harga)}` : `${rupiah(harga)}`;
+    calcText = jumlah>1 ? `${jumlah} x ${rupiah(harga)} (harga manual)` : `${rupiah(harga)} (harga manual)`;
   }
   let subtotal = raw;
   let minApplied = false;
@@ -1351,9 +1492,76 @@ function calcSubtotalForType(p, vals){
   return {subtotal, detail, calcText, minApplied, raw};
 }
 
+function openPickJasaModal(p){
+  const varianList = p.varianList||[];
+  if(varianList.length===0){
+    toast('Produk ini belum punya varian & paket. Atur dulu di menu Produk.', ICONS.close);
+    return;
+  }
+  const varianOptions = varianList.map(v=>`<option value="${v.id}">${escapeHtml(v.nama)}</option>`).join('');
+  openModal(`
+    <div class="modal-head"><h3>${escapeHtml(p.nama)}</h3><button class="icon-btn" data-action="close-modal">${ICONS.close}</button></div>
+    <div class="modal-body">
+      <div class="field-hint">Pilih varian jasa, lalu paket harganya.</div>
+      <div class="field"><label>Varian Jasa</label><select id="qVarian">${varianOptions}</select></div>
+      <div class="field"><label>Paket</label><select id="qPaket"></select></div>
+      <div class="field"><label>Jumlah pesanan</label><input type="number" min="1" step="1" id="qJumlah" value="1"></div>
+      <div class="field"><label>Keterangan item (opsional)</label><input type="text" id="qKeterangan" placeholder="mis. Nama brand, referensi desain"></div>
+      <div class="calc-preview"><span>Subtotal</span><span id="qPreview">Rp0</span></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" data-action="close-modal">Batal</button>
+      <button class="btn btn-primary" id="btnAddToCart">${ICONS.plus} Tambah ke Pesanan</button>
+    </div>
+  `);
+
+  function currentVarian(){ return varianList.find(v=>v.id===document.getElementById('qVarian').value) || null; }
+  function currentPaket(){
+    const v = currentVarian();
+    if(!v) return null;
+    return (v.paketList||[]).find(pk=>pk.id===document.getElementById('qPaket').value) || null;
+  }
+  function populatePaketOptions(){
+    const v = currentVarian();
+    const sel = document.getElementById('qPaket');
+    sel.innerHTML = (v?v.paketList:[]||[]).map(pk=>`<option value="${pk.id}">${escapeHtml(pk.nama)} — ${rupiah(pk.harga)}</option>`).join('');
+  }
+  function updatePreview(){
+    const paket = currentPaket();
+    const jumlah = parseFloat(document.getElementById('qJumlah').value)||1;
+    document.getElementById('qPreview').textContent = rupiah(paket ? paket.harga*jumlah : 0);
+  }
+  populatePaketOptions();
+  updatePreview();
+  document.getElementById('qVarian').addEventListener('change', ()=>{ populatePaketOptions(); updatePreview(); });
+  document.getElementById('qPaket').addEventListener('change', updatePreview);
+  document.getElementById('qJumlah').addEventListener('input', updatePreview);
+
+  document.getElementById('btnAddToCart').addEventListener('click', ()=>{
+    const varian = currentVarian();
+    const paket = currentPaket();
+    const jumlah = parseFloat(document.getElementById('qJumlah').value)||0;
+    if(!varian || !paket){ toast('Pilih varian & paket terlebih dahulu', ICONS.close); return; }
+    if(jumlah<=0){ toast('Isi jumlah pesanan dengan benar', ICONS.close); return; }
+    const subtotal = paket.harga*jumlah;
+    const keterangan = (document.getElementById('qKeterangan').value||'').trim();
+    const calcText = `${varian.nama} — ${paket.nama} x${jumlah} @ ${rupiah(paket.harga)}`;
+    cart.items.push({
+      id:uid(), produkId:p.id, nama:p.nama, keterangan, tipeSatuan:'jasa',
+      detail:{varianNama:varian.nama, paketNama:paket.nama, jumlah},
+      subtotal, hargaSaatItu:paket.harga, calcText, minApplied:false,
+      jenisProduksiSaatItu:'sendiri', hargaVendorSaatItu:null,
+    });
+    closeModal();
+    refreshCartViews();
+    toast(`${p.nama} ditambahkan`);
+  });
+}
+
 function openPickProductModal(productId){
   const p = state.products.find(x=>x.id===productId);
   if(!p) return;
+  if(p.tipeSatuan==='jasa'){ openPickJasaModal(p); return; }
   let inputsHtml = '';
   if(p.tipeSatuan==='m2'){
     inputsHtml = `<div class="field-row">
@@ -1371,13 +1579,17 @@ function openPickProductModal(productId){
     inputsHtml = `<div class="field"><label>Jumlah lembar</label><input type="number" min="0" step="1" id="qJumlah" placeholder="0"></div>`;
   } else if(p.tipeSatuan==='unit'){
     inputsHtml = `<div class="field"><label>Jumlah</label><input type="number" min="0" step="1" id="qJumlah" placeholder="0"></div>`;
-  } else {
-    inputsHtml = `<div class="field"><label>Jumlah</label><input type="number" min="1" step="1" id="qJumlah" value="1" placeholder="1"></div>`;
+  } else { // custom: borongan / harga & biaya vendor input manual
+    inputsHtml = `
+      <div class="field"><label>Harga jual (Rp, per unit — bisa diedit manual)</label><input type="number" min="0" step="1" id="qHargaManual" value="${p.harga||0}" placeholder="0"></div>
+      <div class="field"><label>Jumlah</label><input type="number" min="1" step="1" id="qJumlah" value="1" placeholder="1"></div>
+      <div class="field"><label>Biaya vendor/produksi per unit (Rp, opsional — untuk hitung margin)</label><input type="number" min="0" step="1" id="qVendorManual" value="${p.jenisProduksi==='vendor'?(p.hargaVendor||0):0}" placeholder="0"></div>
+    `;
   }
   openModal(`
     <div class="modal-head"><h3>${escapeHtml(p.nama)}</h3><button class="icon-btn" data-action="close-modal">${ICONS.close}</button></div>
     <div class="modal-body">
-      <div class="field-hint">${UNIT_LABEL[p.tipeSatuan]} &middot; ${rupiah(p.harga)}${p.hargaMinimum>0?` &middot; Min. ${rupiah(p.hargaMinimum)}`:''}</div>
+      <div class="field-hint">${p.tipeSatuan==='custom' ? 'Harga & biaya vendor untuk item ini diisi manual di bawah (cocok untuk project borongan).' : `${UNIT_LABEL[p.tipeSatuan]} &middot; ${rupiah(p.harga)}${p.hargaMinimum>0?` &middot; Min. ${rupiah(p.hargaMinimum)}`:''}`}</div>
       ${inputsHtml}
       <div class="field"><label>Keterangan item (opsional)</label><input type="text" id="qKeterangan" placeholder="mis. Ambulance, Logo Perusahaan"></div>
       <div class="calc-preview"><span>Subtotal</span><span id="qPreview">Rp0</span></div>
@@ -1395,11 +1607,15 @@ function openPickProductModal(productId){
     const qPanjangCm = document.getElementById('qPanjangCm');
     const qLebarCm = document.getElementById('qLebarCm');
     const qJumlah = document.getElementById('qJumlah');
+    const qHargaManual = document.getElementById('qHargaManual');
+    const qVendorManual = document.getElementById('qVendorManual');
     if(qPanjang) vals.panjang = qPanjang.value;
     if(qLebar) vals.lebar = qLebar.value;
     if(qPanjangCm) vals.panjangCm = qPanjangCm.value;
     if(qLebarCm) vals.lebarCm = qLebarCm.value;
     if(qJumlah) vals.jumlah = qJumlah.value;
+    if(qHargaManual) vals.hargaManual = qHargaManual.value;
+    if(qVendorManual) vals.vendorManual = qVendorManual.value;
     return vals;
   }
   function updatePreview(){
@@ -1414,11 +1630,13 @@ function openPickProductModal(productId){
     const {subtotal, detail, raw, calcText, minApplied} = calcSubtotalForType(p, vals);
     if(raw<=0){ toast('Isi ukuran/jumlah dengan benar', ICONS.close); return; }
     const keterangan = (document.getElementById('qKeterangan').value||'').trim();
+    const isCustom = p.tipeSatuan==='custom';
+    const vendorManualVal = isCustom ? (parseFloat(vals.vendorManual)||0) : 0;
     cart.items.push({
       id:uid(), produkId:p.id, nama:p.nama, keterangan, tipeSatuan:p.tipeSatuan, detail, subtotal,
-      hargaSaatItu:p.harga, calcText, minApplied,
-      jenisProduksiSaatItu: p.jenisProduksi,
-      hargaVendorSaatItu: p.jenisProduksi==='vendor' ? (p.hargaVendor||0) : null,
+      hargaSaatItu: isCustom ? (parseFloat(vals.hargaManual)||0) : p.harga, calcText, minApplied,
+      jenisProduksiSaatItu: isCustom ? (vendorManualVal>0 ? 'vendor' : 'sendiri') : p.jenisProduksi,
+      hargaVendorSaatItu: isCustom ? (vendorManualVal>0 ? vendorManualVal : null) : (p.jenisProduksi==='vendor' ? (p.hargaVendor||0) : null),
     });
     closeModal();
     refreshCartViews();
@@ -1440,6 +1658,7 @@ function itemDetailText(item){
   if(item.tipeSatuan==='cm') return `${item.detail.panjangCm}cm x ${item.detail.lebarCm}cm`;
   if(item.tipeSatuan==='lembar') return `${item.detail.jumlahLembar} lembar`;
   if(item.tipeSatuan==='unit') return `${item.detail.jumlah} unit`;
+  if(item.tipeSatuan==='jasa') return `${item.detail.varianNama} — ${item.detail.paketNama}${item.detail.jumlah>1?` x${item.detail.jumlah}`:''}`;
   return item.detail.jumlah>1 ? `${item.detail.jumlah}x` : `1x`;
 }
 
@@ -2733,7 +2952,7 @@ function openOrderDetailModal(order){
 function renderPengaturanPage(){
   const el = document.getElementById('page-pengaturan');
   el.innerHTML = `
-    <div class="page-header"><div><h1>Pengaturan</h1><p>Informasi usaha, kategori produk, dan backup data</p></div></div>
+    <div class="page-header"><div><h1>Pengaturan</h1><p>Informasi usaha, keamanan, dan backup data</p></div></div>
     <div class="page-body">
       <div class="settings-card">
         <h3>Akun & Sinkronisasi</h3>
@@ -2783,16 +3002,6 @@ function renderPengaturanPage(){
       </div>
 
       <div class="settings-card">
-        <h3>Kategori Produk</h3>
-        <p class="desc">Kategori ditampilkan sebagai pill/tab pada menu Produk dan Buat Pesanan.</p>
-        <div id="catList"></div>
-        <div class="field-row" style="margin-top:10px">
-          <div class="field"><input type="text" id="newCatInput" placeholder="Nama kategori baru"></div>
-          <button class="btn btn-secondary" id="btnAddCat">${ICONS.plus} Tambah</button>
-        </div>
-      </div>
-
-      <div class="settings-card">
         <h3>Keamanan</h3>
         <p class="desc">PIN dipakai untuk melindungi perubahan harga di setiap produk agar tidak sembarang diubah staf. PIN ini diminta setiap kali harga sebuah produk ingin diubah di menu Produk.</p>
         <button class="btn btn-secondary" id="btnChangePin">${ICONS.lock} Ubah PIN</button>
@@ -2816,7 +3025,6 @@ function renderPengaturanPage(){
       </div>
     </div>
   `;
-  renderCatList();
 
   document.getElementById('btnChangePin').addEventListener('click', openChangePinModal);
 
@@ -2858,17 +3066,6 @@ function renderPengaturanPage(){
   document.getElementById('setLogoIncludesName').addEventListener('change', (e)=>{
     state.settings.logoIncludesName = e.target.checked;
     persist();
-  });
-
-  document.getElementById('btnAddCat').addEventListener('click', ()=>{
-    const input = document.getElementById('newCatInput');
-    const val = input.value.trim();
-    if(!val) return;
-    if(state.settings.categories.includes(val)){ toast('Kategori sudah ada', ICONS.close); return; }
-    state.settings.categories.push(val);
-    persist();
-    input.value='';
-    renderCatList();
   });
 
   document.getElementById('btnLogoutGoogle')?.addEventListener('click', signOutOfGoogle);
@@ -2937,8 +3134,9 @@ function renderCatList(){
       const inUse = state.products.some(p=>p.kategoriTampilan===cat);
       if(inUse && !confirm(`Kategori "${cat}" masih dipakai produk. Hapus tetap?`)) return;
       state.settings.categories = state.settings.categories.filter(x=>x!==cat);
+      if(produkFilter.kategori===cat) produkFilter.kategori='Semua';
       persist();
-      renderCatList();
+      renderProdukPage();
     });
   });
 }
