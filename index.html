@@ -3455,6 +3455,14 @@ if('serviceWorker' in navigator){
       // fails silently if opened as file:// or without a server — app still works normally
     });
   });
+  // Ketika versi service worker baru aktif, otomatis reload sekali
+  // supaya update selalu langsung terlihat tanpa perlu refresh manual 2x.
+  let swAutoReloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(swAutoReloaded) return;
+    swAutoReloaded = true;
+    window.location.reload();
+  });
 }
 
 /* ================================================================
