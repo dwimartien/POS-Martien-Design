@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Kasir Percetakan</title>
+<title>Pos Martien Design</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" id="appFavicon">
 <meta name="theme-color" content="#2D5185">
@@ -2700,6 +2700,50 @@ function sendQuotationWA(quotation){
   window.open(url, '_blank');
 }
 
+let quotationRiwayatFilter = 'Semua';
+
+function renderQuotationHistoryListHtml(){
+  const filters = ['Semua','Draft','Dikonversi'];
+  let list = [...state.quotations].sort((a,b)=> new Date(b.tanggal)-new Date(a.tanggal));
+  if(quotationRiwayatFilter!=='Semua') list = list.filter(q=>q.status===quotationRiwayatFilter);
+  return `
+    <div class="settings-card no-print" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+        <h3 style="margin:0">Riwayat Quotation</h3>
+        <div class="category-row" style="padding:0;overflow:visible">
+          ${filters.map(f=>`<button class="pill ${quotationRiwayatFilter===f?'active':''}" data-quo-filter="${escapeHtml(f)}">${escapeHtml(f)}</button>`).join('')}
+        </div>
+      </div>
+      ${list.length===0?`<p class="desc" style="margin:0">Belum ada quotation${quotationRiwayatFilter!=='Semua'?` dengan status "${escapeHtml(quotationRiwayatFilter)}"`:''}.</p>`:`
+        <div class="list-card">
+          ${list.map(q=>{
+            const badge = q.status==='Dikonversi' ? 'badge-green' : 'badge-blue';
+            const isActive = currentQuotationId===q.id;
+            return `
+            <div class="list-row" data-quo-hist-id="${q.id}" style="cursor:pointer;${isActive?'background:var(--accent-soft)':''}">
+              <div class="list-avatar">${q.customer.nama ? q.customer.nama.trim()[0].toUpperCase() : '?'}</div>
+              <div class="list-main">
+                <div class="list-title">QUO-${String(q.nomorQuotation).padStart(4,'0')} &middot; ${escapeHtml(q.customer.nama||'-')}</div>
+                <div class="list-sub">${fmtDateShort(q.tanggal)} &middot; ${q.items.length} item &middot; <span class="badge ${badge}">${escapeHtml(q.status)}</span></div>
+              </div>
+              <div class="list-right"><div class="list-amount">${rupiah(q.total)}</div></div>
+            </div>`;
+          }).join('')}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+function bindQuotationHistoryEvents(){
+  document.querySelectorAll('[data-quo-filter]').forEach(b=>{
+    b.addEventListener('click', ()=>{ quotationRiwayatFilter = b.dataset.quoFilter; renderQuotationPage(currentQuotationId); });
+  });
+  document.querySelectorAll('[data-quo-hist-id]').forEach(row=>{
+    row.addEventListener('click', ()=> goTo('quotation', {quotationId: row.dataset.quoHistId}));
+  });
+}
+
 function renderQuotationPage(quotationId){
   const el = document.getElementById('page-quotation');
   let quotation = quotationId ? state.quotations.find(x=>x.id===quotationId) : null;
@@ -2710,10 +2754,12 @@ function renderQuotationPage(quotationId){
     el.innerHTML = `
       <div class="page-header"><div><h1>Quotation</h1><p>Belum ada quotation yang dibuat</p></div></div>
       <div class="page-body">
+        ${renderQuotationHistoryListHtml()}
         <div class="empty-state">${ICONS.quotation}<h3>Belum ada quotation</h3><p>Buat pesanan terlebih dahulu untuk membuat quotation.</p>
         <div style="margin-top:14px"><button class="btn btn-primary" data-goto="pesanan">${ICONS.pesanan} Buat Pesanan</button></div>
         </div>
       </div>`;
+    bindQuotationHistoryEvents();
     return;
   }
 
@@ -2730,9 +2776,9 @@ function renderQuotationPage(quotationId){
   el.innerHTML = `
     <div class="page-header no-print">
       <div><h1>Quotation</h1><p>Preview, cetak, atau kirim penawaran ke customer</p></div>
-      <button class="btn btn-secondary" data-goto="riwayat">${ICONS.history} Lihat Riwayat</button>
     </div>
     <div class="page-body">
+      ${renderQuotationHistoryListHtml()}
       <div class="invoice-wrap" id="print-area">
         <div class="invoice-card">
           ${docHeaderHtml()}
@@ -2789,6 +2835,7 @@ function renderQuotationPage(quotationId){
   document.getElementById('btnSendQuoWA').addEventListener('click', ()=> ensureLogoBeforeSend(()=> sendQuotationWA(quotation)));
   document.getElementById('btnConvertQuo')?.addEventListener('click', ()=> convertQuotationToInvoice(quotation));
   document.querySelector('[data-goto-invoice]')?.addEventListener('click', (e)=> goTo('invoice', {invoiceId: e.target.closest('[data-goto-invoice]').dataset.gotoInvoice}));
+  bindQuotationHistoryEvents();
 }
 
 
