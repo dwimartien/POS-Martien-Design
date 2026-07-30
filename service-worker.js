@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pos-martien-design-v2';
+const CACHE_NAME = 'pos-martien-design-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -23,17 +23,16 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Cache-first, fallback to network, so the app still opens offline.
+// Network-first: selalu coba ambil versi terbaru dulu kalau online.
+// Cache dipakai sebagai fallback kalau offline / koneksi gagal, dan
+// otomatis di-update tiap kali fetch dari network berhasil.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(e.request).then((res) => {
-        const resClone = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, resClone));
-        return res;
-      }).catch(() => cached);
-    })
+    fetch(e.request).then((res) => {
+      const resClone = res.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(e.request, resClone));
+      return res;
+    }).catch(() => caches.match(e.request))
   );
 });
