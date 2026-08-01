@@ -245,6 +245,52 @@ input,select,textarea{font-family:inherit;}
 .product-grid{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:14px;padding:0 28px 28px 28px;
 }
+.combo-launch-wrap{padding:0 28px 16px 28px;}
+.combo-launch-btn{
+  width:100%;display:flex;align-items:center;justify-content:center;gap:8px;
+  padding:12px 16px;border-radius:var(--radius-md);border:1.5px dashed var(--accent-border, var(--accent));
+  background:var(--accent-soft);color:var(--accent-dark);font-size:13.5px;font-weight:700;cursor:pointer;
+  transition:filter .12s ease, transform .08s ease;
+}
+.combo-launch-btn:hover{filter:brightness(0.98);}
+.combo-launch-btn:active{transform:scale(.99);}
+.combo-launch-icon{
+  width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;line-height:1;
+}
+.combo-slot{margin-bottom:10px;}
+.combo-slot-label{font-size:11.5px;font-weight:600;color:var(--text-secondary);margin-bottom:5px;}
+.combo-slot-filled{display:flex;align-items:center;gap:8px;}
+.combo-chip{
+  flex:1;min-width:0;background:var(--success-soft);border:1px solid var(--success);border-radius:10px;
+  padding:8px 12px;display:flex;flex-direction:column;gap:2px;
+}
+.combo-chip-name{font-size:13px;font-weight:700;color:var(--text);}
+.combo-chip-unit{font-size:11px;color:var(--text-secondary);}
+.combo-chip-remove{flex-shrink:0;}
+.combo-search-wrap{position:relative;}
+.combo-search-input{
+  width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:10px;font-size:13.5px;outline:none;
+  background:var(--bg-soft);color:var(--text);
+}
+.combo-search-input:focus{border-color:var(--accent);background:var(--surface);}
+.combo-search-results{
+  margin-top:6px;max-height:190px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;
+  background:var(--surface);
+}
+.combo-search-item{
+  display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;
+  border-bottom:1px solid var(--border);font-size:13px;
+}
+.combo-search-item:last-child{border-bottom:none;}
+.combo-search-item:hover{background:var(--accent-soft);}
+.combo-search-item-name{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.combo-search-item-price{flex-shrink:0;color:var(--text-secondary);font-size:12px;}
+.combo-search-empty{padding:12px;text-align:center;font-size:12.5px;color:var(--text-secondary);}
+.cart-item-combo-badge{
+  display:inline-block;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:6px;
+  background:var(--success-soft);color:var(--success);text-transform:uppercase;letter-spacing:.3px;margin-left:5px;vertical-align:middle;
+}
 .product-card{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);
   padding:14px;cursor:pointer;transition:box-shadow .15s ease, transform .1s ease, border-color .15s ease;
@@ -1591,6 +1637,9 @@ function renderPesananPage(){
         <div class="category-row" id="pesananCatRow">
           ${cats.map(c=>`<button class="pill ${pesananFilter.kategori===c?'active':''}" data-pesanan-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}
         </div>
+        <div class="combo-launch-wrap">
+          <button class="combo-launch-btn" id="btnOpenKombinasi"><span class="combo-launch-icon">+</span> Kombinasi Produk</button>
+        </div>
         <div class="product-grid" id="pesananGrid"></div>
       </div>
       <aside class="cart-panel" id="cartPanelDesktop"></aside>
@@ -1603,6 +1652,7 @@ function renderPesananPage(){
       <button class="btn btn-primary" id="btnOpenCartSheet">${ICONS.cart} Lihat Pesanan</button>
     </div>
   `;
+  document.getElementById('btnOpenKombinasi').addEventListener('click', ()=> openKombinasiModal());
   document.getElementById('pesananSearch').addEventListener('input', (e)=>{ pesananFilter.search = e.target.value; renderPesananGrid(); });
   document.getElementById('pesananSortBy').addEventListener('change', (e)=>{
     pesananFilter.sortBy = e.target.value;
@@ -1722,6 +1772,271 @@ function calcSubtotalForType(p, vals){
     minApplied = true;
   }
   return {subtotal, detail, calcText, minApplied, raw};
+}
+
+/* ---------------------------- KOMBINASI PRODUK (merge item saat input pesanan) ---------------------------- */
+const COMBO_ALLOWED_UNITS = ['m2','m1','cm','lembar','unit'];
+
+function comboUnitDetailKeys(tipe){
+  return {m2:['panjang','lebar'], m1:['panjang'], cm:['panjangCm','lebarCm'], lembar:['jumlahLembar'], unit:['jumlah']}[tipe] || [];
+}
+
+// Hitung subtotal 1 komponen produk dalam kombinasi, dari shared detail (ukuran/qty yang sama untuk semua komponen).
+function calcComponentAmount(p, detail){
+  const harga = p.harga||0;
+  let raw = 0;
+  if(p.tipeSatuan==='m2') raw = (parseFloat(detail.panjang)||0)*(parseFloat(detail.lebar)||0)*harga;
+  else if(p.tipeSatuan==='m1') raw = (parseFloat(detail.panjang)||0)*harga;
+  else if(p.tipeSatuan==='cm') raw = (parseFloat(detail.panjangCm)||0)*(parseFloat(detail.lebarCm)||0)*harga;
+  else if(p.tipeSatuan==='lembar') raw = (parseFloat(detail.jumlahLembar)||0)*harga;
+  else if(p.tipeSatuan==='unit') raw = (parseFloat(detail.jumlah)||0)*harga;
+  let subtotal = raw, minApplied = false;
+  const hargaMinimum = p.hargaMinimum||0;
+  if(['m2','m1','cm','lembar'].includes(p.tipeSatuan) && hargaMinimum>0 && raw>0 && raw<hargaMinimum){
+    subtotal = hargaMinimum; minApplied = true;
+  }
+  return {raw, subtotal, minApplied};
+}
+
+// Hitung biaya vendor 1 komponen (untuk margin), tanpa aturan harga minimum (sama seperti itemVendorCost item tunggal).
+function calcComponentVendorCost(p, detail){
+  if(p.jenisProduksi!=='vendor') return null;
+  const hv = p.hargaVendor||0;
+  if(p.tipeSatuan==='m2') return (parseFloat(detail.panjang)||0)*(parseFloat(detail.lebar)||0)*hv;
+  if(p.tipeSatuan==='m1') return (parseFloat(detail.panjang)||0)*hv;
+  if(p.tipeSatuan==='cm') return (parseFloat(detail.panjangCm)||0)*(parseFloat(detail.lebarCm)||0)*hv;
+  if(p.tipeSatuan==='lembar') return (parseFloat(detail.jumlahLembar)||0)*hv;
+  if(p.tipeSatuan==='unit') return (parseFloat(detail.jumlah)||0)*hv;
+  return null;
+}
+
+function comboComponentUnitInputsHtml(tipe){
+  if(tipe==='m2'){
+    return `<div class="field-row">
+      <div class="field"><label>Panjang (m)</label><input type="number" min="0" step="0.01" id="comboPanjang" placeholder="0"></div>
+      <div class="field"><label>Lebar (m)</label><input type="number" min="0" step="0.01" id="comboLebar" placeholder="0"></div>
+    </div>`;
+  }
+  if(tipe==='m1') return `<div class="field"><label>Panjang (m)</label><input type="number" min="0" step="0.01" id="comboPanjang" placeholder="0"></div>`;
+  if(tipe==='cm'){
+    return `<div class="field-row">
+      <div class="field"><label>Panjang (cm)</label><input type="number" min="0" step="0.1" id="comboPanjangCm" placeholder="0"></div>
+      <div class="field"><label>Lebar (cm)</label><input type="number" min="0" step="0.1" id="comboLebarCm" placeholder="0"></div>
+    </div>`;
+  }
+  if(tipe==='lembar') return `<div class="field"><label>Jumlah lembar</label><input type="number" min="0" step="1" id="comboJumlahLembar" placeholder="0"></div>`;
+  if(tipe==='unit') return `<div class="field"><label>Jumlah</label><input type="number" min="0" step="1" id="comboJumlah" placeholder="0"></div>`;
+  return '';
+}
+
+function readComboDetailFromDom(){
+  const detail = {};
+  const map = {comboPanjang:'panjang', comboLebar:'lebar', comboPanjangCm:'panjangCm', comboLebarCm:'lebarCm', comboJumlahLembar:'jumlahLembar', comboJumlah:'jumlah'};
+  Object.keys(map).forEach(elId=>{
+    const el = document.getElementById(elId);
+    if(el) detail[map[elId]] = el.value;
+  });
+  return detail;
+}
+
+function openKombinasiModal(editingItemId){
+  const editingItem = editingItemId ? cart.items.find(i=>i.id===editingItemId) : null;
+  // comboState.components: [{produkId, nama, tipeSatuan, harga, hargaMinimum, jenisProduksi, hargaVendor}]
+  let comboState = { components: [] };
+  let nameManuallyEdited = false;
+  let searchText = '';
+
+  if(editingItem && editingItem.isCombo){
+    comboState.components = editingItem.comboComponents.map(c=>({...c}));
+    nameManuallyEdited = true; // keep existing custom name by default when editing
+  }
+
+  openModal(`
+    <div class="modal-head"><h3>${editingItem?'Edit':'Buat'} Kombinasi Produk</h3><button class="icon-btn" data-action="close-modal">${ICONS.close}</button></div>
+    <div class="modal-body">
+      <div class="field-hint">Pilih minimal 2 produk untuk digabung jadi 1 baris pesanan. Ukuran/jumlah cukup diisi sekali, berlaku untuk semua produk.</div>
+      <div id="comboSlots"></div>
+      <div id="comboUnitInputs"></div>
+      <div class="field"><label>Nama tampilan</label><input type="text" id="comboNama" placeholder="Otomatis dari nama produk yang dipilih"></div>
+      <div class="field"><label>Keterangan item (opsional)</label><input type="text" id="comboKeterangan" placeholder="mis. Ambulance, Logo Perusahaan"></div>
+      <div class="calc-preview"><span>Subtotal</span><span id="comboPreview">Rp0</span></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" data-action="close-modal">Batal</button>
+      <button class="btn btn-primary" id="btnAddCombo">${ICONS.plus} ${editingItem?'Simpan Perubahan':'Tambah ke Pesanan'}</button>
+    </div>
+  `);
+
+  const namaInput = document.getElementById('comboNama');
+  if(editingItem) namaInput.value = editingItem.nama;
+  namaInput.addEventListener('input', ()=>{ nameManuallyEdited = true; });
+  const ketInput = document.getElementById('comboKeterangan');
+  if(editingItem) ketInput.value = editingItem.keterangan||'';
+
+  function autoName(){
+    if(nameManuallyEdited) return;
+    namaInput.value = comboState.components.map(c=>c.nama).join(' + ');
+  }
+
+  function currentUnit(){ return comboState.components.length>0 ? comboState.components[0].tipeSatuan : null; }
+
+  function matchingProducts(query){
+    const unit = currentUnit();
+    const chosenIds = new Set(comboState.components.map(c=>c.produkId));
+    return state.products.filter(p=>{
+      if(chosenIds.has(p.id)) return false;
+      if(!COMBO_ALLOWED_UNITS.includes(p.tipeSatuan)) return false;
+      if(unit && p.tipeSatuan!==unit) return false;
+      if(query && !p.nama.toLowerCase().includes(query.toLowerCase())) return false;
+      return true;
+    }).slice(0,8);
+  }
+
+  function addComponent(p){
+    comboState.components.push({
+      produkId:p.id, nama:p.nama, tipeSatuan:p.tipeSatuan, harga:p.harga||0, hargaMinimum:p.hargaMinimum||0,
+      jenisProduksi:p.jenisProduksi||'sendiri', hargaVendor:p.jenisProduksi==='vendor'?(p.hargaVendor||0):0
+    });
+    searchText = '';
+    autoName();
+    renderAll();
+  }
+
+  function removeComponent(idx){
+    comboState.components.splice(idx,1);
+    autoName();
+    renderAll();
+  }
+
+  function renderSlots(){
+    const wrap = document.getElementById('comboSlots');
+    const filledHtml = comboState.components.map((c,idx)=>`
+      <div class="combo-slot combo-slot-filled">
+        <div class="combo-slot-label">Produk ${idx+1}</div>
+        <div class="combo-chip">
+          <span class="combo-chip-name">${escapeHtml(c.nama)}</span>
+          <span class="combo-chip-unit">${UNIT_LABEL[c.tipeSatuan]} &middot; ${rupiah(c.harga)}${c.hargaMinimum>0?` &middot; Min. ${rupiah(c.hargaMinimum)}`:''}</span>
+        </div>
+        <button type="button" class="icon-btn combo-chip-remove" data-combo-remove="${idx}">${ICONS.close}</button>
+      </div>
+    `).join('');
+    const nextIdx = comboState.components.length;
+    const results = matchingProducts(searchText);
+    const emptySlotHtml = `
+      <div class="combo-slot">
+        <div class="combo-slot-label">Produk ${nextIdx+1}${nextIdx<1?'':' (opsional)'}</div>
+        <div class="combo-search-wrap">
+          <input type="text" class="combo-search-input" id="comboSearchInput" placeholder="Cari produk..." autocomplete="off" value="${escapeHtml(searchText)}">
+          <div class="combo-search-results">
+            ${results.length===0 ? `<div class="combo-search-empty">${searchText?'Tidak ditemukan':(currentUnit()?`Tidak ada produk lain dengan satuan ${UNIT_LABEL[currentUnit()]}`:'Ketik untuk mencari produk')}</div>` :
+              results.map(p=>`
+                <div class="combo-search-item" data-combo-pick="${p.id}">
+                  <span class="combo-search-item-name">${escapeHtml(p.nama)}</span>
+                  <span class="combo-search-item-price">${rupiah(p.harga)}</span>
+                </div>
+              `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    wrap.innerHTML = filledHtml + emptySlotHtml;
+
+    wrap.querySelectorAll('[data-combo-remove]').forEach(btn=>{
+      btn.addEventListener('click', ()=> removeComponent(parseInt(btn.dataset.comboRemove,10)));
+    });
+    wrap.querySelectorAll('[data-combo-pick]').forEach(row=>{
+      row.addEventListener('click', ()=>{
+        const p = state.products.find(x=>x.id===row.dataset.comboPick);
+        if(p) addComponent(p);
+      });
+    });
+    const searchInput = document.getElementById('comboSearchInput');
+    searchInput.addEventListener('input', (e)=>{ searchText = e.target.value; renderSlots(); });
+    searchInput.focus();
+    if(searchText) searchInput.setSelectionRange(searchText.length, searchText.length);
+  }
+
+  function renderUnitInputs(){
+    const wrap = document.getElementById('comboUnitInputs');
+    const unit = currentUnit();
+    if(!unit || comboState.components.length===0){ wrap.innerHTML=''; return; }
+    wrap.innerHTML = comboComponentUnitInputsHtml(unit);
+    if(editingItem && editingItem.detail){
+      Object.keys(editingItem.detail).forEach(k=>{
+        const idMap = {panjang:'comboPanjang', lebar:'comboLebar', panjangCm:'comboPanjangCm', lebarCm:'comboLebarCm', jumlahLembar:'comboJumlahLembar', jumlah:'comboJumlah'};
+        const el = document.getElementById(idMap[k]);
+        if(el) el.value = editingItem.detail[k];
+      });
+    }
+    wrap.querySelectorAll('input').forEach(inp=> inp.addEventListener('input', updatePreview));
+  }
+
+  function updatePreview(){
+    const detail = readComboDetailFromDom();
+    const total = comboState.components.reduce((s,c)=> s + calcComponentAmount(c, detail).subtotal, 0);
+    document.getElementById('comboPreview').textContent = rupiah(total);
+  }
+
+  function renderAll(){
+    renderSlots();
+    renderUnitInputs();
+    updatePreview();
+  }
+
+  renderAll();
+  if(editingItem) updatePreview();
+
+  document.getElementById('btnAddCombo').addEventListener('click', ()=>{
+    if(comboState.components.length<2){ toast('Pilih minimal 2 produk untuk kombinasi', ICONS.close); return; }
+    const detail = readComboDetailFromDom();
+    const unit = currentUnit();
+    const keys = comboUnitDetailKeys(unit);
+    const hasValue = keys.some(k=> (parseFloat(detail[k])||0) > 0);
+    if(!hasValue){ toast('Isi ukuran/jumlah dengan benar', ICONS.close); return; }
+
+    const parts = comboState.components.map(c=>{
+      const amt = calcComponentAmount(c, detail);
+      const vendorCost = calcComponentVendorCost(c, detail);
+      return {
+        produkId:c.produkId, nama:c.nama, tipeSatuan:c.tipeSatuan, harga:c.harga, hargaMinimum:c.hargaMinimum,
+        jenisProduksi:c.jenisProduksi, hargaVendor:c.hargaVendor,
+        subtotal:amt.subtotal, raw:amt.raw, minApplied:amt.minApplied, vendorCost
+      };
+    });
+    const subtotal = parts.reduce((s,c)=>s+c.subtotal, 0);
+    const minApplied = parts.some(c=>c.minApplied);
+    const namaFinal = (namaInput.value||'').trim() || comboState.components.map(c=>c.nama).join(' + ');
+    const keterangan = (ketInput.value||'').trim();
+
+    // sanitize detail to numeric values matching unit keys
+    const cleanDetail = {};
+    keys.forEach(k=>{ cleanDetail[k] = parseFloat(detail[k])||0; });
+
+    if(editingItem){
+      editingItem.nama = namaFinal;
+      editingItem.keterangan = keterangan;
+      editingItem.tipeSatuan = unit;
+      editingItem.detail = cleanDetail;
+      editingItem.subtotal = subtotal;
+      editingItem.calcText = 'Kombinasi produk';
+      editingItem.minApplied = minApplied;
+      editingItem.isCombo = true;
+      editingItem.comboComponents = parts;
+      editingItem.jenisProduksiSaatItu = 'sendiri';
+      editingItem.hargaVendorSaatItu = null;
+      editingItem.hargaSaatItu = null;
+    } else {
+      cart.items.push({
+        id:uid(), produkId:null, nama:namaFinal, keterangan, tipeSatuan:unit, detail:cleanDetail,
+        subtotal, hargaSaatItu:null, calcText:'Kombinasi produk', minApplied,
+        jenisProduksiSaatItu:'sendiri', hargaVendorSaatItu:null,
+        isCombo:true, comboComponents:parts
+      });
+    }
+    closeModal();
+    refreshCartViews();
+    toast(editingItem?'Kombinasi diperbarui':'Kombinasi produk ditambahkan');
+  });
 }
 
 function openPickJasaModal(p){
@@ -1896,6 +2211,11 @@ function itemDetailText(item){
 
 /* ---------------------------- MARGIN (produk titip vendor saja) ---------------------------- */
 function itemVendorCost(item){
+  if(item.isCombo){
+    const costs = (item.comboComponents||[]).map(c=>c.vendorCost).filter(v=>v!==null && v!==undefined);
+    if(costs.length===0) return null;
+    return costs.reduce((s,v)=>s+v,0);
+  }
   if(item.hargaVendorSaatItu===null || item.hargaVendorSaatItu===undefined) return null;
   const hv = item.hargaVendorSaatItu;
   if(item.tipeSatuan==='m2') return (item.detail.panjang||0)*(item.detail.lebar||0)*hv;
@@ -1936,8 +2256,8 @@ function renderCartInto(container, isMobile){
       ${cart.items.length===0 ? `<div class="cart-empty">${ICONS.cart}<div>Belum ada item. Pilih produk untuk mulai.</div></div>` :
         cart.items.map(item=>`
           <div class="cart-item">
-            <div class="cart-item-info">
-              <div class="cart-item-name">${itemDisplayName(item)}</div>
+            <div class="cart-item-info" ${item.isCombo?`data-edit-combo="${item.id}" style="cursor:pointer"`:''}>
+              <div class="cart-item-name">${itemDisplayName(item)}${item.isCombo?`<span class="cart-item-combo-badge">Kombinasi</span>`:''}</div>
               <div class="cart-item-detail">${itemDetailText(item)}</div>
             </div>
             <div class="cart-item-right">
@@ -1981,6 +2301,9 @@ function renderCartInto(container, isMobile){
   namaPesananInput.addEventListener('input', e=>{ cart.namaPesanan = e.target.value; syncCustomerFields(); });
   container.querySelectorAll('[data-remove-item]').forEach(b=> b.addEventListener('click', ()=>{
     cart.items = cart.items.filter(i=>i.id!==b.dataset.removeItem); refreshCartViews();
+  }));
+  container.querySelectorAll('[data-edit-combo]').forEach(el=> el.addEventListener('click', ()=>{
+    openKombinasiModal(el.dataset.editCombo);
   }));
   container.querySelectorAll('[data-remove-biaya]').forEach(b=> b.addEventListener('click', ()=>{
     cart.biayaTambahan = cart.biayaTambahan.filter(x=>x.id!==b.dataset.removeBiaya); refreshCartViews();
@@ -2116,7 +2439,7 @@ function openFinalizeOrderModal(){
       id: uid(),
       customer: {...cart.customer},
       namaPesanan: (cart.namaPesanan||'').trim(),
-      items: cart.items.map(i=>({produkId:i.produkId, nama:i.nama, keterangan:i.keterangan, tipeSatuan:i.tipeSatuan, detail:i.detail, subtotal:i.subtotal, hargaSaatItu:i.hargaSaatItu, calcText:i.calcText, minApplied:i.minApplied, jenisProduksiSaatItu:i.jenisProduksiSaatItu, hargaVendorSaatItu:i.hargaVendorSaatItu})),
+      items: cart.items.map(i=>({produkId:i.produkId, nama:i.nama, keterangan:i.keterangan, tipeSatuan:i.tipeSatuan, detail:i.detail, subtotal:i.subtotal, hargaSaatItu:i.hargaSaatItu, calcText:i.calcText, minApplied:i.minApplied, jenisProduksiSaatItu:i.jenisProduksiSaatItu, hargaVendorSaatItu:i.hargaVendorSaatItu, isCombo:i.isCombo||false, comboComponents:i.comboComponents||null})),
       biayaTambahan: [...cart.biayaTambahan],
       diskon: {...cart.diskon},
       statusPesanan: 'Pesanan Masuk',
@@ -2173,7 +2496,7 @@ function openFinalizeQuotationModal(){
       nomorQuotation: state.settings.nextQuotationNumber,
       customer: {...cart.customer},
       namaPesanan: (cart.namaPesanan||'').trim(),
-      items: cart.items.map(i=>({produkId:i.produkId, nama:i.nama, keterangan:i.keterangan, tipeSatuan:i.tipeSatuan, detail:i.detail, subtotal:i.subtotal, hargaSaatItu:i.hargaSaatItu, calcText:i.calcText, minApplied:i.minApplied, jenisProduksiSaatItu:i.jenisProduksiSaatItu, hargaVendorSaatItu:i.hargaVendorSaatItu})),
+      items: cart.items.map(i=>({produkId:i.produkId, nama:i.nama, keterangan:i.keterangan, tipeSatuan:i.tipeSatuan, detail:i.detail, subtotal:i.subtotal, hargaSaatItu:i.hargaSaatItu, calcText:i.calcText, minApplied:i.minApplied, jenisProduksiSaatItu:i.jenisProduksiSaatItu, hargaVendorSaatItu:i.hargaVendorSaatItu, isCombo:i.isCombo||false, comboComponents:i.comboComponents||null})),
       biayaTambahan: [...cart.biayaTambahan],
       diskon: {...cart.diskon},
       total,
@@ -2929,7 +3252,10 @@ function renderQuotationHistoryListHtml(){
                 <div class="list-title">QUO-${String(q.nomorQuotation).padStart(4,'0')} &middot; ${escapeHtml(q.customer.nama||'-')}</div>
                 <div class="list-sub">${fmtDateShort(q.tanggal)} &middot; ${q.items.length} item &middot; <span class="badge ${badge}">${escapeHtml(q.status)}</span></div>
               </div>
-              <div class="list-right"><div class="list-amount">${rupiah(q.total)}</div></div>
+              <div class="list-right" style="flex-direction:row;align-items:center;gap:4px">
+                <div class="list-amount">${rupiah(q.total)}</div>
+                <button class="icon-btn" data-delete-quo="${q.id}" title="Hapus riwayat quotation">${ICONS.trash}</button>
+              </div>
             </div>`;
           }).join('')}
         </div>
@@ -2938,12 +3264,32 @@ function renderQuotationHistoryListHtml(){
   `;
 }
 
+function deleteQuotationFromHistory(quotationId){
+  const q = state.quotations.find(x=>x.id===quotationId);
+  if(!q) return;
+  const warn = q.status==='Dikonversi'
+    ? 'Quotation ini sudah dikonversi menjadi invoice. Menghapus riwayat quotation TIDAK akan menghapus invoice-nya. Lanjutkan hapus riwayat quotation ini?'
+    : 'Hapus riwayat quotation ini? Tindakan tidak bisa dibatalkan.';
+  if(!confirm(warn)) return;
+  state.quotations = state.quotations.filter(x=>x.id!==quotationId);
+  if(currentQuotationId===quotationId) currentQuotationId = null;
+  persist();
+  toast('Riwayat quotation dihapus');
+  renderQuotationPage(currentQuotationId);
+}
+
 function bindQuotationHistoryEvents(){
   document.querySelectorAll('[data-quo-filter]').forEach(b=>{
     b.addEventListener('click', ()=>{ quotationRiwayatFilter = b.dataset.quoFilter; renderQuotationPage(currentQuotationId); });
   });
   document.querySelectorAll('[data-quo-hist-id]').forEach(row=>{
     row.addEventListener('click', ()=> goTo('quotation', {quotationId: row.dataset.quoHistId}));
+  });
+  document.querySelectorAll('[data-delete-quo]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      deleteQuotationFromHistory(btn.dataset.deleteQuo);
+    });
   });
 }
 
