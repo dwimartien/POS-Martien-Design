@@ -3020,6 +3020,20 @@ function renderQuotationPage(quotationId){
             <div class="doc-quote-total-row final"><span>Total</span><span>${rupiah(quotation.total)}</span></div>
           </div>
 
+          <div class="doc-sign-bank">
+            <div class="doc-sign-col">
+              <div class="doc-sign-label">Hormat kami,</div>
+              <div class="doc-sign-space"></div>
+              <div class="doc-sign-name">${escapeHtml(state.settings.namaUsaha||'Percetakan')}</div>
+            </div>
+            <div class="doc-bank-col">
+              <div class="doc-sign-label">Informasi Pembayaran</div>
+              ${state.settings.bankInfo
+                ? state.settings.bankInfo.split('\n').filter(l=>l.trim()).map(l=>`<div class="doc-bank-line">${escapeHtml(l)}</div>`).join('')
+                : `<div class="doc-bank-line" style="color:var(--text-secondary);font-size:11px;font-style:italic">Belum diatur — tambahkan di menu Pengaturan</div>`}
+            </div>
+          </div>
+
           <div class="invoice-actions no-print">
             <button class="btn btn-primary" id="btnDownloadQuoPdf">${ICONS.download} Download PDF</button>
             <button class="btn btn-secondary" id="btnPrintQuo">${ICONS.printer} Cetak</button>
