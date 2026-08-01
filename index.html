@@ -444,6 +444,16 @@ input,select,textarea{font-family:inherit;}
 .doc-quote-total-row.final{font-weight:800;font-size:16px;padding-top:12px;margin-top:4px;border-top:1px solid #bbb;}
 .doc-badge-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
 .invoice-actions{display:flex;gap:9px;margin-top:24px;flex-wrap:wrap;}
+.doc-sign-bank{
+  display:flex;justify-content:space-between;gap:24px;
+  margin-top:28px;padding-top:20px;border-top:1px dashed var(--border);
+  flex-wrap:wrap;
+}
+.doc-sign-col,.doc-bank-col{flex:1;min-width:160px;}
+.doc-sign-label{font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+.doc-sign-space{height:56px;border-bottom:1px solid var(--border);margin-bottom:8px;width:140px;}
+.doc-sign-name{font-size:12.5px;font-weight:600;color:var(--text);}
+.doc-bank-line{font-size:12.5px;color:var(--text);line-height:1.8;}
 .invoice-footer-note{margin-top:24px;font-size:11px;color:#999;text-align:center;}
 
 /* ---------- Toast ---------- */
@@ -767,6 +777,7 @@ const DEFAULT_SETTINGS = {
   nextQuotationNumber:1,
   categories:['Banner & Spanduk','Cetak Dokumen','Kartu Nama','Stiker','Jasa Desain'],
   securityPin:'1234',
+  bankInfo:'',
 };
 
 function loadState(){
@@ -2162,11 +2173,9 @@ function getInvoicePayment(invoice, orders){
 }
 
 function itemInvoiceCalcLine(item){
-  const totalTxt = rupiah(item.subtotal);
-  if(item.calcText){
-    return item.minApplied ? `${item.calcText} (di bawah minimum, dikenakan harga minimum)` : `${item.calcText} = ${totalTxt}`;
-  }
-  return totalTxt;
+  const dimText = itemDetailText(item);
+  if(item.minApplied) return `${dimText} (di bawah minimum, dikenakan harga minimum)`;
+  return dimText;
 }
 
 function docHeaderHtml(){
@@ -2297,6 +2306,19 @@ function renderInvoicePage(invoiceId){
             `:''}
           </div>
 
+          <div class="doc-sign-bank">
+            <div class="doc-sign-col">
+              <div class="doc-sign-label">Hormat kami,</div>
+              <div class="doc-sign-space"></div>
+              <div class="doc-sign-name">${escapeHtml(state.settings.namaUsaha||'Percetakan')}</div>
+            </div>
+            <div class="doc-bank-col">
+              <div class="doc-sign-label">Informasi Pembayaran</div>
+              ${state.settings.bankInfo
+                ? state.settings.bankInfo.split('\n').filter(l=>l.trim()).map(l=>`<div class="doc-bank-line">${escapeHtml(l)}</div>`).join('')
+                : `<div class="doc-bank-line" style="color:var(--text-secondary);font-size:11px;font-style:italic">Belum diatur — tambahkan di menu Pengaturan</div>`}
+            </div>
+          </div>
           <div class="invoice-actions no-print">
             <button class="btn btn-primary" id="btnDownloadPdf">${ICONS.download} Download PDF</button>
             <button class="btn btn-secondary" id="btnPrintInvoice">${ICONS.printer} Cetak</button>
@@ -2549,6 +2571,38 @@ async function generateDocumentPdf(opts){
     });
 
     y = boxTop + boxH + 26;
+
+    // Tanda tangan + info bank
+    const signY = y;
+    const halfW = (boxW - 20) / 2;
+
+    // Kiri: tanda tangan
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(100);
+    doc.text('HORMAT KAMI,', marginX, signY);
+    doc.setDrawColor(180); doc.setLineWidth(0.5);
+    doc.line(marginX, signY + 30, marginX + 100, signY + 30);
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(30);
+    doc.text(opts.namaUsaha||'Percetakan', marginX, signY + 40);
+
+    // Kanan: info bank
+    const bankX = marginX + halfW + 20;
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.5); doc.setTextColor(100);
+    doc.text('INFORMASI PEMBAYARAN', bankX, signY);
+    if(opts.bankInfo){
+      const bankLines = opts.bankInfo.split('\n').filter(l=>l.trim());
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(30);
+      bankLines.forEach((line, i)=>{
+        doc.text(line, bankX, signY + 14 + (i * 13), {maxWidth: halfW});
+      });
+    } else {
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(160);
+      doc.text('(belum diatur)', bankX, signY + 14);
+    }
+
+    y = signY + 56;
+    doc.setDrawColor(210); doc.setLineWidth(0.4);
+    doc.line(marginX, y, marginX + boxW, y);
+    y += 12;
     doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(150);
     doc.text(opts.footerNote||'Terima kasih.', marginX, y, {maxWidth: boxW});
 
@@ -2601,6 +2655,8 @@ async function downloadInvoicePdf(orders, invoice){
     extraTotalRows,
     filename: `Invoice-INV-${String(invoice.nomorInvoice).padStart(4,'0')}.pdf`,
     footerNote: 'Terima kasih atas pesanan Anda.',
+    namaUsaha: state.settings.namaUsaha||'Percetakan',
+    bankInfo: state.settings.bankInfo||'',
   });
 }
 
@@ -2627,6 +2683,8 @@ async function downloadQuotationPdf(quotation){
     extraTotalRows: [],
     filename: `Quotation-QUO-${String(quotation.nomorQuotation).padStart(4,'0')}.pdf`,
     footerNote: 'Penawaran ini bersifat sementara dan dapat berubah sewaktu-waktu.',
+    namaUsaha: state.settings.namaUsaha||'Percetakan',
+    bankInfo: state.settings.bankInfo||'',
   });
 }
 
@@ -3289,6 +3347,11 @@ function renderPengaturanPage(){
         <div class="field" style="margin-bottom:10px"><label>Alamat (opsional)</label><input type="text" id="setAlamat" value="${escapeHtml(state.settings.alamat)}"></div>
         <div class="field" style="margin-bottom:10px"><label>No. WhatsApp usaha (opsional)</label><input type="text" id="setNoWA" value="${escapeHtml(state.settings.noWA)}"></div>
         <div class="field" style="margin-bottom:10px">
+          <label>Informasi Pembayaran / Rekening Bank</label>
+          <textarea id="setBankInfo" rows="4" placeholder="Contoh:&#10;BCA 1234567890 a/n Martien Design&#10;BRI 0987654321 a/n Dwi Martien&#10;Transfer ke no rek di atas lalu konfirmasi ke WA" style="width:100%;padding:8px 11px;border:1px solid var(--border);border-radius:9px;font-size:13px;outline:none;background:var(--bg-soft);color:var(--text);resize:vertical">${escapeHtml(state.settings.bankInfo||'')}</textarea>
+          <div class="field-hint">Ditampilkan di bagian bawah invoice & PDF. Satu baris per info rekening.</div>
+        </div>
+        <div class="field" style="margin-bottom:10px">
           <label>Logo usaha (SVG)</label>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px">
             <div style="width:64px;height:64px;border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--bg-soft);overflow:hidden;flex-shrink:0">
@@ -3344,6 +3407,7 @@ function renderPengaturanPage(){
     state.settings.namaUsaha = document.getElementById('setNamaUsaha').value.trim() || DEFAULT_SETTINGS.namaUsaha;
     state.settings.alamat = document.getElementById('setAlamat').value.trim();
     state.settings.noWA = document.getElementById('setNoWA').value.trim();
+    state.settings.bankInfo = document.getElementById('setBankInfo').value.trim();
     persist();
     toast('Informasi usaha disimpan');
   });
