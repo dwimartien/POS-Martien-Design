@@ -444,6 +444,39 @@ input,select,textarea{font-family:inherit;}
 .doc-quote-total-row.final{font-weight:800;font-size:16px;padding-top:12px;margin-top:4px;border-top:1px solid #bbb;}
 .doc-badge-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
 .invoice-actions{display:flex;gap:9px;margin-top:24px;flex-wrap:wrap;}
+/* ---------- Product group header ---------- */
+.product-group-header{
+  grid-column:1/-1;
+  padding:8px 4px 6px 4px;
+  font-size:11.5px;font-weight:700;
+  color:var(--text-secondary);
+  text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:1.5px solid var(--border);
+  margin-bottom:2px;margin-top:10px;
+}
+.product-group-header:first-child{margin-top:0;}
+
+/* ---------- Sort controls ---------- */
+.sort-row{
+  display:flex;gap:8px;padding:0 28px 12px 28px;align-items:center;flex-wrap:wrap;
+}
+.sort-label{font-size:12px;color:var(--text-secondary);font-weight:600;white-space:nowrap;}
+.sort-select{
+  padding:6px 10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);font-size:12.5px;
+  outline:none;cursor:pointer;
+}
+.sort-select:focus{border-color:var(--accent);}
+.sort-dir-btn{
+  width:32px;height:32px;border-radius:8px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text-secondary);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  font-size:15px;flex-shrink:0;
+  transition:background .12s, color .12s;
+}
+.sort-dir-btn:hover{background:var(--accent-soft);color:var(--accent);}
+.sort-dir-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
 .doc-sign-bank{
   display:flex;justify-content:space-between;gap:24px;
   margin-top:28px;padding-top:20px;border-top:1px dashed var(--border);
@@ -993,7 +1026,8 @@ document.getElementById('btnThemeToggle').addEventListener('click', ()=>{
 /* ================================================================
    PRODUK PAGE
    ================================================================ */
-let produkFilter = {kategori:'Semua', search:''};
+let produkFilter = {kategori:'Semua', search:'', sortBy:'default', sortDir:'asc'};
+let pesananFilter = {kategori:'Semua', search:'', sortBy:'default', sortDir:'asc'};
 
 let dashMarginUnlocked = false;
 
@@ -1075,6 +1109,16 @@ function renderProdukPage(){
     <div class="search-row">
       <div class="search-box">${ICONS.search}<input type="text" id="produkSearch" placeholder="Cari produk..." value="${escapeHtml(produkFilter.search)}"></div>
     </div>
+    <div class="sort-row">
+      <span class="sort-label">Urutkan:</span>
+      <select class="sort-select" id="produkSortBy">
+        <option value="default" ${produkFilter.sortBy==='default'?'selected':''}>Default (Kategori)</option>
+        <option value="name" ${produkFilter.sortBy==='name'?'selected':''}>Nama</option>
+        <option value="price" ${produkFilter.sortBy==='price'?'selected':''}>Harga</option>
+      </select>
+      <button class="sort-dir-btn ${produkFilter.sortDir==='asc'?'active':''}" id="produkSortAsc" title="A → Z / Kecil → Besar">↑</button>
+      <button class="sort-dir-btn ${produkFilter.sortDir==='desc'?'active':''}" id="produkSortDesc" title="Z → A / Besar → Kecil">↓</button>
+    </div>
     <div class="category-row" id="produkCatRow">
       ${cats.map(c=>`<button class="pill ${produkFilter.kategori===c?'active':''}" data-produk-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}
     </div>
@@ -1082,6 +1126,22 @@ function renderProdukPage(){
   `;
   document.getElementById('produkSearch').addEventListener('input', (e)=>{
     produkFilter.search = e.target.value;
+    renderProdukGrid();
+  });
+  document.getElementById('produkSortBy').addEventListener('change', (e)=>{
+    produkFilter.sortBy = e.target.value;
+    renderProdukGrid();
+  });
+  document.getElementById('produkSortAsc').addEventListener('click', ()=>{
+    produkFilter.sortDir = 'asc';
+    document.getElementById('produkSortAsc').classList.add('active');
+    document.getElementById('produkSortDesc').classList.remove('active');
+    renderProdukGrid();
+  });
+  document.getElementById('produkSortDesc').addEventListener('click', ()=>{
+    produkFilter.sortDir = 'desc';
+    document.getElementById('produkSortDesc').classList.add('active');
+    document.getElementById('produkSortAsc').classList.remove('active');
     renderProdukGrid();
   });
   el.querySelectorAll('[data-produk-cat]').forEach(b=>{
@@ -1106,30 +1166,71 @@ function renderProdukPage(){
   renderProdukGrid();
 }
 
+function sortProducts(list, sortBy, sortDir){
+  const sorted = [...list];
+  if(sortBy==='name'){
+    sorted.sort((a,b)=> a.nama.localeCompare(b.nama, 'id'));
+  } else if(sortBy==='price'){
+    sorted.sort((a,b)=> (a.harga||0)-(b.harga||0));
+  }
+  if(sortDir==='desc') sorted.reverse();
+  return sorted;
+}
+
+function groupByKategori(list){
+  const map = {};
+  list.forEach(p=>{
+    const k = p.kategoriTampilan||'Lainnya';
+    if(!map[k]) map[k]=[];
+    map[k].push(p);
+  });
+  return map;
+}
+
 function filteredProducts(){
-  return state.products.filter(p=>{
+  const filtered = state.products.filter(p=>{
     const matchCat = produkFilter.kategori==='Semua' || p.kategoriTampilan===produkFilter.kategori;
     const matchSearch = !produkFilter.search || p.nama.toLowerCase().includes(produkFilter.search.toLowerCase());
     return matchCat && matchSearch;
   });
+  return sortProducts(filtered, produkFilter.sortBy, produkFilter.sortDir);
 }
 
-function renderProdukGrid(){
-  const grid = document.getElementById('produkGrid');
-  const list = filteredProducts();
-  if(list.length===0){
-    grid.innerHTML = `<div class="empty-state">${ICONS.emptyBox}<h3>Belum ada produk</h3><p>Tambahkan produk pertama untuk mulai berjualan.</p></div>`;
-    return;
-  }
-  grid.innerHTML = list.map(p=>`
-    <div class="product-card" data-edit-product="${p.id}">
+function produkCardHtml(p, dataAttr){
+  return `
+    <div class="product-card" ${dataAttr}="${p.id}">
       ${p.jenisProduksi==='vendor' ? `<span class="vendor-tag">Vendor</span>`:''}
       <div class="product-visual">${UNIT_ICON[p.tipeSatuan]}</div>
       <div class="product-name">${escapeHtml(p.nama)}</div>
       <div class="product-unit-badge">${UNIT_LABEL[p.tipeSatuan]}</div>
       <div class="product-price">${p.tipeSatuan==='jasa' ? jasaPriceSummary(p) : rupiah(p.harga)}</div>
     </div>
-  `).join('');
+  `;
+}
+
+function renderProdukGrid(){
+  const grid = document.getElementById('produkGrid');
+  const list = filteredProducts();
+  if(state.products.length===0){
+    grid.innerHTML = `<div class="empty-state">${ICONS.emptyBox}<h3>Belum ada produk</h3><p>Tambahkan produk pertama untuk mulai berjualan.</p></div>`;
+    return;
+  }
+  if(list.length===0){
+    grid.innerHTML = `<div class="empty-state">${ICONS.search}<h3>Tidak ditemukan</h3><p>Coba kata kunci atau kategori lain.</p></div>`;
+    return;
+  }
+  const showGroup = produkFilter.kategori==='Semua' && produkFilter.sortBy==='default';
+  if(showGroup){
+    const groups = groupByKategori(list);
+    const catOrder = state.settings.categories;
+    const orderedKeys = [...catOrder.filter(k=>groups[k]), ...Object.keys(groups).filter(k=>!catOrder.includes(k))];
+    grid.innerHTML = orderedKeys.map(cat=>`
+      <div class="product-group-header">${escapeHtml(cat)}</div>
+      ${groups[cat].map(p=>produkCardHtml(p,'data-edit-product')).join('')}
+    `).join('');
+  } else {
+    grid.innerHTML = list.map(p=>produkCardHtml(p,'data-edit-product')).join('');
+  }
   grid.querySelectorAll('[data-edit-product]').forEach(card=>{
     card.addEventListener('click', ()=> openProductModal(card.dataset.editProduct));
   });
@@ -1435,7 +1536,6 @@ document.addEventListener('click',(e)=>{
 /* ================================================================
    BUAT PESANAN PAGE (cart / draft order)
    ================================================================ */
-let pesananFilter = {kategori:'Semua', search:''};
 let cart = newCartDraft();
 
 function newCartDraft(){
@@ -1478,6 +1578,16 @@ function renderPesananPage(){
         <div class="search-row">
           <div class="search-box">${ICONS.search}<input type="text" id="pesananSearch" placeholder="Cari produk..." value="${escapeHtml(pesananFilter.search)}"></div>
         </div>
+        <div class="sort-row">
+          <span class="sort-label">Urutkan:</span>
+          <select class="sort-select" id="pesananSortBy">
+            <option value="default" ${pesananFilter.sortBy==='default'?'selected':''}>Default (Kategori)</option>
+            <option value="name" ${pesananFilter.sortBy==='name'?'selected':''}>Nama</option>
+            <option value="price" ${pesananFilter.sortBy==='price'?'selected':''}>Harga</option>
+          </select>
+          <button class="sort-dir-btn ${pesananFilter.sortDir==='asc'?'active':''}" id="pesananSortAsc" title="A → Z / Kecil → Besar">↑</button>
+          <button class="sort-dir-btn ${pesananFilter.sortDir==='desc'?'active':''}" id="pesananSortDesc" title="Z → A / Besar → Kecil">↓</button>
+        </div>
         <div class="category-row" id="pesananCatRow">
           ${cats.map(c=>`<button class="pill ${pesananFilter.kategori===c?'active':''}" data-pesanan-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}
         </div>
@@ -1494,6 +1604,22 @@ function renderPesananPage(){
     </div>
   `;
   document.getElementById('pesananSearch').addEventListener('input', (e)=>{ pesananFilter.search = e.target.value; renderPesananGrid(); });
+  document.getElementById('pesananSortBy').addEventListener('change', (e)=>{
+    pesananFilter.sortBy = e.target.value;
+    renderPesananGrid();
+  });
+  document.getElementById('pesananSortAsc').addEventListener('click', ()=>{
+    pesananFilter.sortDir = 'asc';
+    document.getElementById('pesananSortAsc').classList.add('active');
+    document.getElementById('pesananSortDesc').classList.remove('active');
+    renderPesananGrid();
+  });
+  document.getElementById('pesananSortDesc').addEventListener('click', ()=>{
+    pesananFilter.sortDir = 'desc';
+    document.getElementById('pesananSortDesc').classList.add('active');
+    document.getElementById('pesananSortAsc').classList.remove('active');
+    renderPesananGrid();
+  });
   el.querySelectorAll('[data-pesanan-cat]').forEach(b=>{
     b.addEventListener('click', ()=>{ pesananFilter.kategori = b.dataset.pesananCat; renderPesananPage(); });
   });
@@ -1504,11 +1630,12 @@ function renderPesananPage(){
 }
 
 function filteredPesananProducts(){
-  return state.products.filter(p=>{
+  const filtered = state.products.filter(p=>{
     const matchCat = pesananFilter.kategori==='Semua' || p.kategoriTampilan===pesananFilter.kategori;
     const matchSearch = !pesananFilter.search || p.nama.toLowerCase().includes(pesananFilter.search.toLowerCase());
     return matchCat && matchSearch;
   });
+  return sortProducts(filtered, pesananFilter.sortBy, pesananFilter.sortDir);
 }
 
 function renderPesananGrid(){
@@ -1522,14 +1649,32 @@ function renderPesananGrid(){
     grid.innerHTML = `<div class="empty-state">${ICONS.search}<h3>Tidak ditemukan</h3><p>Coba kata kunci atau kategori lain.</p></div>`;
     return;
   }
-  grid.innerHTML = list.map(p=>`
-    <div class="product-card" data-pick-product="${p.id}">
-      <div class="product-visual">${UNIT_ICON[p.tipeSatuan]}</div>
-      <div class="product-name">${escapeHtml(p.nama)}</div>
-      <div class="product-unit-badge">${UNIT_LABEL[p.tipeSatuan]}</div>
-      <div class="product-price">${rupiah(p.harga)}</div>
-    </div>
-  `).join('');
+  const showGroup = pesananFilter.kategori==='Semua' && pesananFilter.sortBy==='default';
+  if(showGroup){
+    const groups = groupByKategori(list);
+    const catOrder = state.settings.categories;
+    const orderedKeys = [...catOrder.filter(k=>groups[k]), ...Object.keys(groups).filter(k=>!catOrder.includes(k))];
+    grid.innerHTML = orderedKeys.map(cat=>`
+      <div class="product-group-header">${escapeHtml(cat)}</div>
+      ${groups[cat].map(p=>`
+        <div class="product-card" data-pick-product="${p.id}">
+          <div class="product-visual">${UNIT_ICON[p.tipeSatuan]}</div>
+          <div class="product-name">${escapeHtml(p.nama)}</div>
+          <div class="product-unit-badge">${UNIT_LABEL[p.tipeSatuan]}</div>
+          <div class="product-price">${rupiah(p.harga)}</div>
+        </div>
+      `).join('')}
+    `).join('');
+  } else {
+    grid.innerHTML = list.map(p=>`
+      <div class="product-card" data-pick-product="${p.id}">
+        <div class="product-visual">${UNIT_ICON[p.tipeSatuan]}</div>
+        <div class="product-name">${escapeHtml(p.nama)}</div>
+        <div class="product-unit-badge">${UNIT_LABEL[p.tipeSatuan]}</div>
+        <div class="product-price">${rupiah(p.harga)}</div>
+      </div>
+    `).join('');
+  }
   grid.querySelectorAll('[data-pick-product]').forEach(card=>{
     card.addEventListener('click', ()=> openPickProductModal(card.dataset.pickProduct));
   });
